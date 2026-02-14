@@ -1,0 +1,6 @@
+streamlit
+passporteye
+opencv-python-headless
+pytesseract
+Pillow
+numpy
