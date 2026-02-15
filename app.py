@@ -19,22 +19,61 @@ st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
 # ---------------- UI STYLE ----------------
 st.markdown("""
 <style>
-.main-title {font-size:30px;font-weight:700;color:#0b5394;}
-.box {background:#f7f9fc;padding:15px;border-radius:10px;margin-bottom:10px;border:1px solid #e3e8ef;}
-.nm1 {background:#eef7ff;padding:15px;border-left:5px solid #1c7ed6;border-radius:10px;}
-.docs {background:#eefaf3;padding:15px;border-left:5px solid #2f9e44;border-radius:10px;}
+.main-title {
+    font-size:30px;
+    font-weight:700;
+    color:#0b5394;
+    margin-bottom:0px;
+}
+.dev-name {
+    font-size:14px;
+    color:#6b7280;
+    margin-top:-8px;
+    margin-bottom:20px;
+}
+.box {
+    background:#f7f9fc;
+    padding:15px;
+    border-radius:10px;
+    margin-bottom:10px;
+    border:1px solid #e3e8ef;
+}
+.nm1 {
+    background:#eef7ff;
+    padding:15px;
+    border-left:5px solid #1c7ed6;
+    border-radius:10px;
+}
+.docs {
+    background:#eefaf3;
+    padding:15px;
+    border-left:5px solid #2f9e44;
+    border-radius:10px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">✈️ Amadeus Auto PNR Builder</div>', unsafe_allow_html=True)
+# -------- HEADER --------
+st.markdown(
+    '<div class="main-title">✈️ Amadeus Auto PNR Builder</div>',
+    unsafe_allow_html=True
+)
+st.markdown(
+    '<div class="dev-name">Developed by Aamir Khan</div>',
+    unsafe_allow_html=True
+)
 
 # ---------------- DATE FUNCTIONS ----------------
 def mrz_date_fix(d):
-    y=int(d[:2]); m=int(d[2:4]); da=int(d[4:6])
-    if y>datetime.datetime.now().year%100:
-        y+=1900
+    y=int(d[:2])
+    m=int(d[2:4])
+    da=int(d[4:6])
+
+    if y > datetime.datetime.now().year % 100:
+        y += 1900
     else:
-        y+=2000
+        y += 2000
+
     return datetime.datetime(y,m,da)
 
 def safe_date(d):
@@ -115,9 +154,11 @@ def auto_rotate(path):
     cv2.imwrite(path,img)
 
 # ---------------- UPLOAD ----------------
-files=st.file_uploader("Upload Passport Images",
-                       type=["jpg","jpeg","png"],
-                       accept_multiple_files=True)
+files=st.file_uploader(
+    "Upload Passport Images",
+    type=["jpg","jpeg","png"],
+    accept_multiple_files=True
+)
 
 passengers=[]
 seen=set()
