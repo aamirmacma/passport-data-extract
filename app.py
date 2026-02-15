@@ -6,7 +6,6 @@ import os
 import cv2
 import uuid
 import re
-import streamlit.components.v1 as components
 
 # ================= TESSERACT =================
 if os.name == "nt":
@@ -31,11 +30,7 @@ st.markdown("""
     align-items:center;
 }
 
-.header-title {
-    font-size:26px;
-    font-weight:700;
-    color:white;
-}
+.header-title { font-size:26px;font-weight:700;color:white; }
 
 .header-dev {
     background:white;
@@ -53,20 +48,6 @@ st.markdown("""
     border-left:5px solid #1c7ed6;
     margin-bottom:10px;
 }
-
-.nm1-box {
-    background:#eef5ff;
-    padding:15px;
-    border-radius:12px;
-    border-left:5px solid #2f9e44;
-}
-
-.docs-box {
-    background:#f1fff5;
-    padding:15px;
-    border-radius:12px;
-    border-left:5px solid #37b24d;
-}
 </style>
 
 <div class="header-bar">
@@ -75,77 +56,71 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ================= FUNCTIONS =================
+# ================= SAFE DATE =================
 
-def mrz_date_fix(d):
-    y=int(d[:2])
-    m=int(d[2:4])
-    da=int(d[4:6])
-    if y > datetime.datetime.now().year % 100:
-        y += 1900
-    else:
-        y += 2000
-    return datetime.datetime(y,m,da)
+def safe_mrz_date(d):
 
-def safe_date(d):
-    return mrz_date_fix(d).strftime("%d%b%y").upper()
+    if not d or len(d) != 6:
+        return None
 
-def calculate_age(d):
-    birth=mrz_date_fix(d)
+    try:
+        y=int(d[:2])
+        m=int(d[2:4])
+        da=int(d[4:6])
+
+        current_year=datetime.datetime.now().year % 100
+
+        if y > current_year:
+            y += 1900
+        else:
+            y += 2000
+
+        return datetime.datetime(y,m,da)
+
+    except:
+        return None
+
+
+def format_date(dt):
+    if not dt:
+        return ""
+    return dt.strftime("%d%b%y").upper()
+
+
+def calculate_age(dob_raw):
+
+    birth = safe_mrz_date(dob_raw)
+
+    if not birth:
+        return 30, ""
+
     today=datetime.datetime.today()
     age=today.year-birth.year-((today.month,today.day)<(birth.month,birth.day))
-    return age,birth.strftime("%d%b%y").upper()
+
+    return age, format_date(birth)
+
 
 def passenger_title(age, gender, dob):
+
     if age >= 12:
         return "MR" if gender=="M" else "MRS"
+
     elif age >= 2:
         return f"MSTR(CHD/{dob})" if gender=="M" else f"MISS(CHD/{dob})"
+
     else:
         return "INF"
 
-def parse_mrz_names(surname,names):
-    surname=surname.replace("<","").strip().upper()
-    names=names.replace("<"," ")
-    names=" ".join(names.split())
-    return surname,names
 
-# ================= OCR EXTRA =================
-def extract_extra_fields(path):
-
-    img=cv2.imread(path)
-    if img is None:
-        return "","","",""
-
-    gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    text=pytesseract.image_to_string(gray)
-
-    father=""; pob=""; doi=""; cnic=""
-
-    lines=text.upper().split("\n")
-
-    for i,line in enumerate(lines):
-
-        if "FATHER" in line or "HUSBAND" in line:
-            if i+1 < len(lines):
-                father=lines[i+1].strip()
-
-        if "PLACE OF BIRTH" in line:
-            if i+1 < len(lines):
-                pob=lines[i+1].strip()
-
-        if "DATE OF ISSUE" in line:
-            if i+1 < len(lines):
-                doi=lines[i+1].strip()
-
-        m=re.search(r"\d{5}-\d{7}-\d",line)
-        if m:
-            cnic=m.group()
-
-    return father,pob,doi,cnic
+def clean_name(text):
+    if not text:
+        return ""
+    text=text.replace("<"," ")
+    return " ".join(text.split()).upper()
 
 # ================= UPLOAD =================
-files=st.file_uploader(
+
+files = st.file_uploader(
     "Upload Passport Images",
     type=["jpg","jpeg","png"],
     accept_multiple_files=True
@@ -163,57 +138,57 @@ if files:
         with open(temp,"wb") as fp:
             fp.write(f.getbuffer())
 
-        mrz=read_mrz(temp)
+        mrz=None
+        try:
+            mrz=read_mrz(temp)
+        except:
+            pass
 
-        if mrz:
+        if not mrz:
+            os.remove(temp)
+            continue
 
-            d=mrz.to_dict()
-            passport=d.get("number","")
+        d=mrz.to_dict()
 
-            if passport in seen:
-                continue
+        passport=d.get("number","")
+        if not passport or passport in seen:
+            os.remove(temp)
+            continue
 
-            seen.add(passport)
+        seen.add(passport)
 
-            surname,names=parse_mrz_names(
-                d.get("surname",""),
-                d.get("names","")
-            )
+        surname=clean_name(d.get("surname",""))
+        given=clean_name(d.get("names",""))
 
-            gender=d.get("sex","M")
-            country=d.get("country","")
+        gender=d.get("sex","M")
+        country=d.get("country","PAK")
 
-            age,dob=calculate_age(d.get("date_of_birth"))
-            exp=safe_date(d.get("expiration_date"))
+        age,dob=calculate_age(d.get("date_of_birth"))
 
-            title=passenger_title(age,gender,dob)
+        exp_date=safe_mrz_date(d.get("expiration_date"))
+        exp=format_date(exp_date)
 
-            father,pob,doi,cnic=extract_extra_fields(temp)
+        title=passenger_title(age,gender,dob)
 
-            passengers.append({
-                "surname":surname,
-                "given":names,
-                "title":title,
-                "passport":passport,
-                "dob":dob,
-                "exp":exp,
-                "gender":gender,
-                "country":country,
-                "father":father,
-                "pob":pob,
-                "doi":doi,
-                "cnic":cnic
-            })
+        passengers.append({
+            "surname":surname,
+            "given":given,
+            "title":title,
+            "passport":passport,
+            "dob":dob,
+            "exp":exp,
+            "gender":gender,
+            "country":country
+        })
 
         os.remove(temp)
 
 # ================= OUTPUT =================
+
 nm1_lines=[]
 docs_lines=[]
 
 if passengers:
-
-    st.subheader("Extracted Passport Details")
 
     for i,p in enumerate(passengers,1):
 
@@ -224,14 +199,7 @@ if passengers:
         st.write("Passport:",p["passport"])
         st.write("DOB:",p["dob"])
         st.write("Expiry:",p["exp"])
-        st.write("Father/Husband Name:",p["father"])
-        st.write("Place of Birth:",p["pob"])
-        st.write("Date of Issue:",p["doi"])
-        st.write("CNIC:",p["cnic"])
         st.markdown('</div>',unsafe_allow_html=True)
-
-    pax=1
-    for p in passengers:
 
         nm1_lines.append(
             f"NM1{p['surname']}/{p['given']} {p['title']}"
@@ -240,25 +208,11 @@ if passengers:
         docs_lines.append(
             f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
             f"{p['country']}-{p['dob']}-{p['gender']}-"
-            f"{p['exp']}-{p['surname']}-{p['given'].replace(' ','-')}-H/P{pax}"
+            f"{p['exp']}-{p['surname']}-{p['given'].replace(' ','-')}-H/P{i}"
         )
-        pax+=1
 
-    export_text="\n".join(nm1_lines)+"\n\n"+"\n".join(docs_lines)
-
-    st.markdown('<div class="nm1-box">',unsafe_allow_html=True)
     st.subheader("NM1 Entries")
     st.code("\n".join(nm1_lines))
-    st.markdown('</div>',unsafe_allow_html=True)
 
-    st.markdown('<div class="docs-box">',unsafe_allow_html=True)
     st.subheader("SRDOCS Entries")
     st.code("\n".join(docs_lines))
-    st.markdown('</div>',unsafe_allow_html=True)
-
-    st.download_button(
-        "⬇ Download Amadeus PNR (TXT)",
-        data=export_text,
-        file_name="amadeus_pnr.txt",
-        mime="text/plain"
-    )
