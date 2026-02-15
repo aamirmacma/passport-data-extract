@@ -20,7 +20,6 @@ st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
 # ================= HEADER + STYLE =================
 st.markdown("""
 <style>
-
 .stApp { background-color:#f4f7fb; }
 
 .header-bar {
@@ -70,7 +69,6 @@ st.markdown("""
     border-radius:12px;
     border-left:5px solid #37b24d;
 }
-
 </style>
 
 <div class="header-bar">
@@ -82,13 +80,18 @@ st.markdown("""
 # ================= FUNCTIONS =================
 
 def mrz_date_fix(d):
+    if not d or len(d) < 6:
+        return datetime.datetime(2000,1,1)
+
     y=int(d[:2])
     m=int(d[2:4])
     da=int(d[4:6])
+
     if y > datetime.datetime.now().year % 100:
         y += 1900
     else:
         y += 2000
+
     return datetime.datetime(y,m,da)
 
 def safe_date(d):
@@ -104,7 +107,7 @@ def passenger_title(age,gender,dob):
     if age >= 12:
         return "MR" if gender=="M" else "MRS"
     elif age >= 2:
-        return f"MSTR(CHD/{dob})" if gender=="M" else f"MISS(CHD/{dob})"
+        return "CHD"
     else:
         return "INF"
 
@@ -115,16 +118,17 @@ def parse_mrz_names(surname,names):
 
     clean=[]
     for w in names.split():
-        if len(w)<=1: continue
-        if len(set(w))==1: continue
-        if w.count("K")>len(w)*0.5: continue
+        if len(w)<=1:
+            continue
+        if len(set(w))==1:   # removes KKKKK
+            continue
+        if w.count("K")>len(w)*0.6:
+            continue
         clean.append(w)
 
     return surname," ".join(clean)
 
-# ================= OCR EXTRA DATA =================
 def extract_extra_fields(path):
-
     img=cv2.imread(path)
     if img is None:
         return "","","",""
@@ -133,11 +137,9 @@ def extract_extra_fields(path):
     text=pytesseract.image_to_string(gray)
 
     father=""; pob=""; doi=""; cnic=""
-
     lines=text.upper().split("\n")
 
     for i,line in enumerate(lines):
-
         if "FATHER" in line or "HUSBAND" in line:
             if i+1 < len(lines):
                 father=lines[i+1].strip()
@@ -156,16 +158,17 @@ def extract_extra_fields(path):
 
     return father,pob,doi,cnic
 
-# ================= IMAGE ROTATE =================
 def auto_rotate(path):
     img=cv2.imread(path)
-    if img is None: return
+    if img is None:
+        return
     h,w=img.shape[:2]
     if h>w:
         img=cv2.rotate(img,cv2.ROTATE_90_CLOCKWISE)
     cv2.imwrite(path,img)
 
 # ================= UPLOAD =================
+
 files=st.file_uploader(
     "Upload Passport Images",
     type=["jpg","jpeg","png"],
@@ -215,16 +218,17 @@ if files:
             exp=safe_date(d.get("expiration_date"))
 
             father,pob,doi,cnic=extract_extra_fields(temp)
+            title=passenger_title(age,gender,dob)
 
             passengers.append({
                 "surname":surname,
                 "names":names,
+                "title":title,
                 "passport":passport,
                 "dob":dob,
                 "exp":exp,
                 "gender":gender,
                 "country":country,
-                "age":age,
                 "father":father,
                 "pob":pob,
                 "doi":doi,
@@ -234,6 +238,7 @@ if files:
         os.remove(temp)
 
 # ================= OUTPUT =================
+
 nm1_lines=[]
 docs_lines=[]
 
@@ -245,6 +250,9 @@ if passengers:
 
         st.markdown('<div class="passport-box">',unsafe_allow_html=True)
         st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+        st.write("Surname:",p["surname"])
+        st.write("Given Name:",p["names"])
+        st.write("Title:",p["title"])
         st.write("Passport:",p["passport"])
         st.write("DOB:",p["dob"])
         st.write("Expiry:",p["exp"])
@@ -257,9 +265,7 @@ if passengers:
     pax=1
     for p in passengers:
 
-        title=passenger_title(p["age"],p["gender"],p["dob"])
-
-        nm1_lines.append(f"NM1{p['surname']}/{p['names']} {title}")
+        nm1_lines.append(f"NM1{p['surname']}/{p['names']} {p['title']}")
 
         docs_lines.append(
             f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
