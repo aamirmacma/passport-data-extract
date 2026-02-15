@@ -1,243 +1,297 @@
 import streamlit as st
 from passporteye import read_mrz
 import datetime
-import numpy as np
-import cv2
-import re
-import tempfile
+import pytesseract
 import os
+import cv2
+import uuid
+import re
+import streamlit.components.v1 as components
 
-# ================= PAGE =================
+# ================= TESSERACT AUTO =================
+if os.name == "nt":
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+else:
+    pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+
+# ================= PAGE CONFIG =================
 st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
 
+# ================= HEADER + STYLE =================
 st.markdown("""
 <style>
 
-.main-title{
-    font-size:32px;
+.stApp { background-color:#f4f7fb; }
+
+.header-bar {
+    background: linear-gradient(90deg,#0b5394,#1c7ed6);
+    padding:14px 20px;
+    border-radius:12px;
+    margin-bottom:20px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    box-shadow:0 3px 8px rgba(0,0,0,0.15);
+}
+
+.header-title {
+    font-size:26px;
     font-weight:700;
+    color:white;
+}
+
+.header-dev {
+    background:white;
     color:#0b5394;
+    padding:6px 14px;
+    border-radius:20px;
+    font-size:14px;
+    font-weight:600;
 }
 
-.box{
-    background:#f4f8ff;
+.passport-box {
+    background:white;
     padding:15px;
-    border-left:6px solid #0b5394;
-    border-radius:8px;
-    margin-bottom:12px;
+    border-radius:12px;
+    border-left:5px solid #1c7ed6;
+    margin-bottom:10px;
 }
 
-.nm1{
-    background:#eef7ff;
-    padding:12px;
-    border-left:5px solid #2e75b6;
-    border-radius:8px;
+.nm1-box {
+    background:#eef5ff;
+    padding:15px;
+    border-radius:12px;
+    border-left:5px solid #2f9e44;
 }
 
-.docs{
+.docs-box {
     background:#f1fff5;
-    padding:12px;
-    border-left:5px solid #2ea44f;
-    border-radius:8px;
+    padding:15px;
+    border-radius:12px;
+    border-left:5px solid #37b24d;
 }
 
 </style>
+
+<div class="header-bar">
+    <div class="header-title">✈️ Amadeus Auto PNR Builder</div>
+    <div class="header-dev">Developed by Aamir Khan</div>
+</div>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">✈️ Amadeus Auto PNR Builder</div>', unsafe_allow_html=True)
-st.caption("Developed by Aamir Khan")
+# ================= FUNCTIONS =================
 
+def mrz_date_fix(d):
+    y=int(d[:2])
+    m=int(d[2:4])
+    da=int(d[4:6])
+    if y > datetime.datetime.now().year % 100:
+        y += 1900
+    else:
+        y += 2000
+    return datetime.datetime(y,m,da)
 
-# ================= IMAGE PROCESS =================
-def preprocess(img):
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.convertScaleAbs(gray, alpha=1.4, beta=0)
-
-    kernel = np.array([[0,-1,0],[-1,5,-1],[0,-1,0]])
-    sharp = cv2.filter2D(gray, -1, kernel)
-
-    return sharp
-
-
-# ================= NAME CLEAN =================
-def clean_name(txt):
-
-    if not txt:
-        return ""
-
-    txt = txt.replace("<", " ")
-    txt = re.sub(r'[^A-Z ]', '', txt.upper())
-    txt = " ".join(txt.split())
-
-    clean_words=[]
-
-    for w in txt.split():
-
-        # remove OCR garbage like KKKKK
-        if len(set(w)) == 1 and len(w) > 2:
-            continue
-
-        w = re.sub(r'(.)\1{2,}', r'\1', w)
-        clean_words.append(w)
-
-    return " ".join(clean_words)
-
-
-# ================= DATE =================
-def fix_mrz_date(d):
-
-    try:
-        y=int(d[:2])
-        m=int(d[2:4])
-        day=int(d[4:6])
-
-        year = 1900+y if y>30 else 2000+y
-        return datetime.date(year,m,day)
-    except:
-        return None
-
+def safe_date(d):
+    return mrz_date_fix(d).strftime("%d%b%y").upper()
 
 def calculate_age(d):
-
-    birth=fix_mrz_date(d)
-    if not birth:
-        return None,""
-
-    today=datetime.date.today()
-    age=today.year-birth.year-(
-        (today.month,today.day)<(birth.month,birth.day)
-    )
-
+    birth=mrz_date_fix(d)
+    today=datetime.datetime.today()
+    age=today.year-birth.year-((today.month,today.day)<(birth.month,birth.day))
     return age,birth.strftime("%d%b%y").upper()
 
-
-# ================= TITLE =================
-def get_title(age, gender):
-
-    if age is None:
-        return "MR"
-
-    if age < 2:
+def passenger_title(age,gender,dob):
+    if age >= 12:
+        return "MR" if gender=="M" else "MRS"
+    elif age >= 2:
+        return f"MSTR(CHD/{dob})" if gender=="M" else f"MISS(CHD/{dob})"
+    else:
         return "INF"
 
-    if age < 12:
-        return "CHD"
+def parse_mrz_names(surname,names):
+    surname=surname.replace("<","").strip().upper()
+    names=names.replace("<"," ")
+    names=" ".join(names.split())
 
-    if gender == "F":
-        return "MRS"
+    clean=[]
+    for w in names.split():
+        if len(w)<=1: continue
+        if len(set(w))==1: continue
+        if w.count("K")>len(w)*0.5: continue
+        clean.append(w)
 
-    return "MR"
+    return surname," ".join(clean)
 
+# ================= OCR EXTRA DATA =================
+def extract_extra_fields(path):
+
+    img=cv2.imread(path)
+    if img is None:
+        return "","","",""
+
+    gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    text=pytesseract.image_to_string(gray)
+
+    father=""; pob=""; doi=""; cnic=""
+
+    lines=text.upper().split("\n")
+
+    for i,line in enumerate(lines):
+
+        if "FATHER" in line or "HUSBAND" in line:
+            if i+1 < len(lines):
+                father=lines[i+1].strip()
+
+        if "PLACE OF BIRTH" in line:
+            if i+1 < len(lines):
+                pob=lines[i+1].strip()
+
+        if "DATE OF ISSUE" in line:
+            if i+1 < len(lines):
+                doi=lines[i+1].strip()
+
+        m=re.search(r"\d{5}-\d{7}-\d",line)
+        if m:
+            cnic=m.group()
+
+    return father,pob,doi,cnic
+
+# ================= IMAGE ROTATE =================
+def auto_rotate(path):
+    img=cv2.imread(path)
+    if img is None: return
+    h,w=img.shape[:2]
+    if h>w:
+        img=cv2.rotate(img,cv2.ROTATE_90_CLOCKWISE)
+    cv2.imwrite(path,img)
 
 # ================= UPLOAD =================
-files = st.file_uploader(
+files=st.file_uploader(
     "Upload Passport Images",
     type=["jpg","jpeg","png"],
     accept_multiple_files=True
 )
 
-if files:
+passengers=[]
+seen=set()
 
-    passengers=[]
-    seen=set()
+if files:
 
     for f in files:
 
-        file_bytes = np.asarray(bytearray(f.read()), dtype=np.uint8)
-        img = cv2.imdecode(file_bytes, 1)
+        temp=f"temp_{uuid.uuid4().hex}.jpg"
 
-        if img is None:
-            continue
+        with open(temp,"wb") as fp:
+            fp.write(f.getbuffer())
 
-        img = preprocess(img)
-
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
-        cv2.imwrite(tmp.name, img)
+        auto_rotate(temp)
 
         try:
-            mrz = read_mrz(tmp.name)
+            mrz=read_mrz(temp)
         except:
-            mrz = None
+            mrz=None
 
-        os.unlink(tmp.name)
+        if mrz:
 
-        if not mrz:
-            st.warning("MRZ not detected")
-            continue
+            d=mrz.to_dict()
+            passport=d.get("number","")
 
-        d = mrz.to_dict()
+            if passport in seen:
+                st.warning(f"Duplicate skipped: {passport}")
+                os.remove(temp)
+                continue
 
-        surname = clean_name(d.get("surname"))
-        given = clean_name(d.get("names"))
+            seen.add(passport)
 
-        passport = d.get("number")
-        dob_raw = d.get("date_of_birth")
-        exp_raw = d.get("expiration_date")
-        gender = d.get("sex")
+            surname,names=parse_mrz_names(
+                d.get("surname",""),
+                d.get("names","")
+            )
 
-        age, dob = calculate_age(dob_raw)
+            gender=d.get("sex","M")
+            country=d.get("country","")
 
-        expiry=""
-        exp = fix_mrz_date(exp_raw)
-        if exp:
-            expiry = exp.strftime("%d%b%y").upper()
+            age,dob=calculate_age(d.get("date_of_birth"))
+            exp=safe_date(d.get("expiration_date"))
 
-        title = get_title(age, gender)
+            father,pob,doi,cnic=extract_extra_fields(temp)
 
-        key = passport + dob
-        if key in seen:
-            continue
-        seen.add(key)
+            passengers.append({
+                "surname":surname,
+                "names":names,
+                "passport":passport,
+                "dob":dob,
+                "exp":exp,
+                "gender":gender,
+                "country":country,
+                "age":age,
+                "father":father,
+                "pob":pob,
+                "doi":doi,
+                "cnic":cnic
+            })
 
-        passengers.append({
-            "surname":surname,
-            "given":given,
-            "title":title,
-            "passport":passport,
-            "dob":dob,
-            "expiry":expiry
-        })
+        os.remove(temp)
 
+# ================= OUTPUT =================
+nm1_lines=[]
+docs_lines=[]
 
-    # ================= DISPLAY =================
+if passengers:
+
     st.subheader("Extracted Passport Details")
 
     for i,p in enumerate(passengers,1):
 
-        st.markdown(f"""
-        <div class="box">
-        <b>Passenger {i}: {p['surname']} {p['given']}</b><br><br>
-        Surname: {p['surname']}<br>
-        Given Name: {p['given']}<br>
-        Title: {p['title']}<br>
-        Passport: {p['passport']}<br>
-        DOB: {p['dob']}<br>
-        Expiry: {p['expiry']}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div class="passport-box">',unsafe_allow_html=True)
+        st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+        st.write("Passport:",p["passport"])
+        st.write("DOB:",p["dob"])
+        st.write("Expiry:",p["exp"])
+        st.write("Father/Husband Name:",p["father"])
+        st.write("Place of Birth:",p["pob"])
+        st.write("Date of Issue:",p["doi"])
+        st.write("CNIC:",p["cnic"])
+        st.markdown('</div>',unsafe_allow_html=True)
 
-
-    # ================= NM1 =================
-    st.subheader("NM1 Entries")
-
-    nm1=[]
+    pax=1
     for p in passengers:
-        nm1.append(f"NM1{p['surname']}/{p['given']} {p['title']}")
 
-    st.markdown(f"<div class='nm1'>{'<br>'.join(nm1)}</div>", unsafe_allow_html=True)
+        title=passenger_title(p["age"],p["gender"],p["dob"])
 
+        nm1_lines.append(f"NM1{p['surname']}/{p['names']} {title}")
 
-    # ================= SRDOCS =================
-    st.subheader("SRDOCS Entries")
-
-    docs=[]
-    for i,p in enumerate(passengers,1):
-
-        docs.append(
-            f"SRDOCS SV HK1-P-PK-{p['passport']}-PK-"
-            f"{p['dob']}-{p['title'][0]}-{p['expiry']}-"
-            f"{p['surname']}-{p['given'].replace(' ','-')}-H/P{i}"
+        docs_lines.append(
+            f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+            f"{p['country']}-{p['dob']}-{p['gender']}-"
+            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}"
         )
+        pax+=1
 
-    st.markdown(f"<div class='docs'>{'<br>'.join(docs)}</div>", unsafe_allow_html=True)
+    export_text="\n".join(nm1_lines)+"\n\n"+"\n".join(docs_lines)
+
+    st.markdown('<div class="nm1-box">',unsafe_allow_html=True)
+    st.subheader("NM1 Entries")
+    st.code("\n".join(nm1_lines))
+    st.markdown('</div>',unsafe_allow_html=True)
+
+    st.markdown('<div class="docs-box">',unsafe_allow_html=True)
+    st.subheader("SRDOCS Entries")
+    st.code("\n".join(docs_lines))
+    st.markdown('</div>',unsafe_allow_html=True)
+
+    st.download_button(
+        "⬇ Download Amadeus PNR (TXT)",
+        data=export_text,
+        file_name="amadeus_pnr.txt",
+        mime="text/plain"
+    )
+
+    components.html(f"""
+    <button style="background:#1c7ed6;color:white;
+    padding:10px 18px;border:none;border-radius:6px;
+    font-size:16px;cursor:pointer;"
+    onclick="navigator.clipboard.writeText(`{export_text}`)">
+    📋 Copy PNR to Clipboard
+    </button>
+    """, height=60)
