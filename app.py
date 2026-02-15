@@ -4,28 +4,36 @@ import datetime
 import numpy as np
 import cv2
 import re
+import tempfile
+import os
 
 # ================= PAGE =================
 st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
 
 st.markdown("""
 <style>
-.main-title{
-    font-size:30px;
-    font-weight:700;
-    color:#0b5394;
-}
-.box{
-    background:#f7f9fc;
-    padding:15px;
-    border-radius:10px;
-    margin-bottom:10px;
-}
+.main-title{font-size:30px;font-weight:700;color:#0b5394;}
+.box{background:#f7f9fc;padding:15px;border-radius:10px;margin-bottom:10px;}
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">✈️ Amadeus Auto PNR Builder</div>', unsafe_allow_html=True)
 st.caption("Developed by Aamir Khan")
+
+
+# ================= IMAGE CLEAN =================
+def preprocess(img):
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # contrast improve
+    gray = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)
+
+    # sharpen
+    kernel = np.array([[0,-1,0],[-1,5,-1],[0,-1,0]])
+    sharp = cv2.filter2D(gray, -1, kernel)
+
+    return sharp
 
 
 # ================= NAME CLEAN =================
@@ -38,7 +46,7 @@ def clean_name(txt):
     txt = re.sub(r'[^A-Z ]', '', txt.upper())
     txt = " ".join(txt.split())
 
-    # remove KKKKK OCR garbage
+    # remove OCR garbage like KKKKK
     words=[]
     for w in txt.split():
         w=re.sub(r'(.)\1{2,}', r'\1', w)
@@ -107,7 +115,6 @@ if files:
 
     for f in files:
 
-        # -------- FIXED IMAGE LOAD (CLOUD SAFE) --------
         file_bytes = np.asarray(bytearray(f.read()), dtype=np.uint8)
         img = cv2.imdecode(file_bytes, 1)
 
@@ -115,10 +122,18 @@ if files:
             st.warning("Image not readable")
             continue
 
+        img = preprocess(img)
+
+        # temp save (important for cloud)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        cv2.imwrite(tmp.name, img)
+
         try:
-            mrz = read_mrz(img)
+            mrz = read_mrz(tmp.name)
         except:
             mrz = None
+
+        os.unlink(tmp.name)
 
         if not mrz:
             st.warning("MRZ not detected")
@@ -165,7 +180,6 @@ if files:
         st.markdown(f"""
         <div class="box">
         <b>Passenger {i}: {p['surname']} {p['given']}</b><br><br>
-
         Surname: {p['surname']}<br>
         Given Name: {p['given']}<br>
         Title: {p['title']}<br>
