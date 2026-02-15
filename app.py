@@ -12,8 +12,35 @@ st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
 
 st.markdown("""
 <style>
-.main-title{font-size:30px;font-weight:700;color:#0b5394;}
-.box{background:#f7f9fc;padding:15px;border-radius:10px;margin-bottom:10px;}
+
+.main-title{
+    font-size:32px;
+    font-weight:700;
+    color:#0b5394;
+}
+
+.box{
+    background:#f4f8ff;
+    padding:15px;
+    border-left:6px solid #0b5394;
+    border-radius:8px;
+    margin-bottom:12px;
+}
+
+.nm1{
+    background:#eef7ff;
+    padding:12px;
+    border-left:5px solid #2e75b6;
+    border-radius:8px;
+}
+
+.docs{
+    background:#f1fff5;
+    padding:12px;
+    border-left:5px solid #2ea44f;
+    border-radius:8px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -21,15 +48,12 @@ st.markdown('<div class="main-title">✈️ Amadeus Auto PNR Builder</div>', uns
 st.caption("Developed by Aamir Khan")
 
 
-# ================= IMAGE CLEAN =================
+# ================= IMAGE PROCESS =================
 def preprocess(img):
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.convertScaleAbs(gray, alpha=1.4, beta=0)
 
-    # contrast improve
-    gray = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)
-
-    # sharpen
     kernel = np.array([[0,-1,0],[-1,5,-1],[0,-1,0]])
     sharp = cv2.filter2D(gray, -1, kernel)
 
@@ -46,13 +70,18 @@ def clean_name(txt):
     txt = re.sub(r'[^A-Z ]', '', txt.upper())
     txt = " ".join(txt.split())
 
-    # remove OCR garbage like KKKKK
-    words=[]
-    for w in txt.split():
-        w=re.sub(r'(.)\1{2,}', r'\1', w)
-        words.append(w)
+    clean_words=[]
 
-    return " ".join(words)
+    for w in txt.split():
+
+        # remove OCR garbage like KKKKK
+        if len(set(w)) == 1 and len(w) > 2:
+            continue
+
+        w = re.sub(r'(.)\1{2,}', r'\1', w)
+        clean_words.append(w)
+
+    return " ".join(clean_words)
 
 
 # ================= DATE =================
@@ -119,12 +148,10 @@ if files:
         img = cv2.imdecode(file_bytes, 1)
 
         if img is None:
-            st.warning("Image not readable")
             continue
 
         img = preprocess(img)
 
-        # temp save (important for cloud)
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
         cv2.imwrite(tmp.name, img)
 
@@ -172,6 +199,7 @@ if files:
             "expiry":expiry
         })
 
+
     # ================= DISPLAY =================
     st.subheader("Extracted Passport Details")
 
@@ -189,6 +217,7 @@ if files:
         </div>
         """, unsafe_allow_html=True)
 
+
     # ================= NM1 =================
     st.subheader("NM1 Entries")
 
@@ -196,7 +225,8 @@ if files:
     for p in passengers:
         nm1.append(f"NM1{p['surname']}/{p['given']} {p['title']}")
 
-    st.code("\n".join(nm1))
+    st.markdown(f"<div class='nm1'>{'<br>'.join(nm1)}</div>", unsafe_allow_html=True)
+
 
     # ================= SRDOCS =================
     st.subheader("SRDOCS Entries")
@@ -204,12 +234,10 @@ if files:
     docs=[]
     for i,p in enumerate(passengers,1):
 
-        line=(
+        docs.append(
             f"SRDOCS SV HK1-P-PK-{p['passport']}-PK-"
             f"{p['dob']}-{p['title'][0]}-{p['expiry']}-"
             f"{p['surname']}-{p['given'].replace(' ','-')}-H/P{i}"
         )
 
-        docs.append(line)
-
-    st.code("\n".join(docs))
+    st.markdown(f"<div class='docs'>{'<br>'.join(docs)}</div>", unsafe_allow_html=True)
