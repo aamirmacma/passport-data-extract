@@ -1,8 +1,8 @@
 import streamlit as st
 from passporteye import read_mrz
+from PIL import Image
 import datetime
 import re
-from PIL import Image
 
 # ================= PAGE =================
 st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
@@ -10,7 +10,7 @@ st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
 st.markdown("""
 <style>
 .main-title{
-    font-size:32px;
+    font-size:30px;
     font-weight:700;
     color:#0b5394;
 }
@@ -18,7 +18,7 @@ st.markdown("""
     background:#f7f9fc;
     padding:15px;
     border-radius:10px;
-    margin-bottom:12px;
+    margin-bottom:10px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -26,31 +26,31 @@ st.markdown("""
 st.markdown('<div class="main-title">✈️ Amadeus Auto PNR Builder</div>', unsafe_allow_html=True)
 st.caption("Developed by Aamir Khan")
 
-# ================= CLEAN NAME =================
-def clean_name(txt):
 
+# ================= NAME CLEAN =================
+def clean_name(txt):
     if not txt:
         return ""
 
-    txt = txt.replace("<"," ")
+    txt = txt.replace("<", " ")
     txt = re.sub(r'[^A-Z ]', '', txt.upper())
     txt = " ".join(txt.split())
 
-    words = []
+    # remove OCR KKKKK problem
+    words=[]
     for w in txt.split():
-        w = re.sub(r'(.)\1{2,}', r'\1', w)
+        w=re.sub(r'(.)\1{2,}', r'\1', w)
         words.append(w)
 
     return " ".join(words)
 
-# ================= DATE FIX =================
+
+# ================= DATE =================
 def fix_mrz_date(d):
-
     try:
-        y = int(d[:2])
-        m = int(d[2:4])
-        day = int(d[4:6])
-
+        y=int(d[:2])
+        m=int(d[2:4])
+        day=int(d[4:6])
         year = 1900+y if y>30 else 2000+y
         return datetime.date(year,m,day)
     except:
@@ -58,18 +58,17 @@ def fix_mrz_date(d):
 
 
 def calculate_age(d):
-
-    birth = fix_mrz_date(d)
+    birth=fix_mrz_date(d)
     if not birth:
         return None,""
 
-    today = datetime.date.today()
-
-    age = today.year - birth.year - (
-        (today.month,today.day) < (birth.month,birth.day)
+    today=datetime.date.today()
+    age=today.year-birth.year-(
+        (today.month,today.day)<(birth.month,birth.day)
     )
 
-    return age, birth.strftime("%d%b%y").upper()
+    return age,birth.strftime("%d%b%y").upper()
+
 
 # ================= TITLE =================
 def get_title(age, gender):
@@ -79,12 +78,15 @@ def get_title(age, gender):
 
     if age < 2:
         return "INF"
+
     if age < 12:
         return "CHD"
 
-    if gender == "F":
+    if gender=="F":
         return "MRS"
+
     return "MR"
+
 
 # ================= UPLOAD =================
 files = st.file_uploader(
@@ -104,6 +106,7 @@ if files:
         mrz=read_mrz(img)
 
         if not mrz:
+            st.warning("MRZ not detected")
             continue
 
         d=mrz.to_dict()
