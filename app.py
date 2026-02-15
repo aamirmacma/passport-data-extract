@@ -56,27 +56,23 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ================= SAFE DATE =================
+# ================= SAFE DATE FUNCTIONS =================
 
 def safe_mrz_date(d):
-
     if not d or len(d) != 6:
         return None
-
     try:
         y=int(d[:2])
         m=int(d[2:4])
         da=int(d[4:6])
 
         current_year=datetime.datetime.now().year % 100
-
         if y > current_year:
             y += 1900
         else:
             y += 2000
 
         return datetime.datetime(y,m,da)
-
     except:
         return None
 
@@ -88,18 +84,14 @@ def format_date(dt):
 
 
 def calculate_age(dob_raw):
-
-    birth = safe_mrz_date(dob_raw)
-
+    birth=safe_mrz_date(dob_raw)
     if not birth:
-        return 30, ""
-
+        return 30,""
     today=datetime.datetime.today()
     age=today.year-birth.year-((today.month,today.day)<(birth.month,birth.day))
+    return age,format_date(birth)
 
-    return age, format_date(birth)
-
-
+# ================= TITLE =================
 def passenger_title(age, gender, dob):
 
     if age >= 12:
@@ -111,16 +103,49 @@ def passenger_title(age, gender, dob):
     else:
         return "INF"
 
-
+# ================= NAME CLEAN =================
 def clean_name(text):
     if not text:
         return ""
     text=text.replace("<"," ")
     return " ".join(text.split()).upper()
 
-# ================= UPLOAD =================
+# ================= OCR EXTRA DATA =================
+def extract_extra_fields(path):
 
-files = st.file_uploader(
+    img=cv2.imread(path)
+    if img is None:
+        return "","","",""
+
+    gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    text=pytesseract.image_to_string(gray)
+
+    father=""; pob=""; doi=""; cnic=""
+
+    lines=text.upper().split("\n")
+
+    for i,line in enumerate(lines):
+
+        if "FATHER" in line or "HUSBAND" in line:
+            if i+1 < len(lines):
+                father=lines[i+1].strip()
+
+        if "PLACE OF BIRTH" in line:
+            if i+1 < len(lines):
+                pob=lines[i+1].strip()
+
+        if "DATE OF ISSUE" in line:
+            if i+1 < len(lines):
+                doi=lines[i+1].strip()
+
+        m=re.search(r"\d{5}-\d{7}-\d",line)
+        if m:
+            cnic=m.group()
+
+    return father,pob,doi,cnic
+
+# ================= UPLOAD =================
+files=st.file_uploader(
     "Upload Passport Images",
     type=["jpg","jpeg","png"],
     accept_multiple_files=True
@@ -164,11 +189,11 @@ if files:
         country=d.get("country","PAK")
 
         age,dob=calculate_age(d.get("date_of_birth"))
-
-        exp_date=safe_mrz_date(d.get("expiration_date"))
-        exp=format_date(exp_date)
+        exp=format_date(safe_mrz_date(d.get("expiration_date")))
 
         title=passenger_title(age,gender,dob)
+
+        father,pob,doi,cnic=extract_extra_fields(temp)
 
         passengers.append({
             "surname":surname,
@@ -178,17 +203,22 @@ if files:
             "dob":dob,
             "exp":exp,
             "gender":gender,
-            "country":country
+            "country":country,
+            "father":father,
+            "pob":pob,
+            "doi":doi,
+            "cnic":cnic
         })
 
         os.remove(temp)
 
 # ================= OUTPUT =================
-
 nm1_lines=[]
 docs_lines=[]
 
 if passengers:
+
+    st.subheader("Extracted Passport Details")
 
     for i,p in enumerate(passengers,1):
 
@@ -199,6 +229,10 @@ if passengers:
         st.write("Passport:",p["passport"])
         st.write("DOB:",p["dob"])
         st.write("Expiry:",p["exp"])
+        st.write("Father/Husband Name:",p["father"])
+        st.write("Place of Birth:",p["pob"])
+        st.write("Date of Issue:",p["doi"])
+        st.write("CNIC:",p["cnic"])
         st.markdown('</div>',unsafe_allow_html=True)
 
         nm1_lines.append(
