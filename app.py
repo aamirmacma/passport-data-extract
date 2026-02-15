@@ -1,7 +1,8 @@
 import streamlit as st
 from passporteye import read_mrz
-from PIL import Image
 import datetime
+import numpy as np
+import cv2
 import re
 
 # ================= PAGE =================
@@ -29,6 +30,7 @@ st.caption("Developed by Aamir Khan")
 
 # ================= NAME CLEAN =================
 def clean_name(txt):
+
     if not txt:
         return ""
 
@@ -36,7 +38,7 @@ def clean_name(txt):
     txt = re.sub(r'[^A-Z ]', '', txt.upper())
     txt = " ".join(txt.split())
 
-    # remove OCR KKKKK problem
+    # remove KKKKK OCR garbage
     words=[]
     for w in txt.split():
         w=re.sub(r'(.)\1{2,}', r'\1', w)
@@ -47,10 +49,12 @@ def clean_name(txt):
 
 # ================= DATE =================
 def fix_mrz_date(d):
+
     try:
         y=int(d[:2])
         m=int(d[2:4])
         day=int(d[4:6])
+
         year = 1900+y if y>30 else 2000+y
         return datetime.date(year,m,day)
     except:
@@ -58,6 +62,7 @@ def fix_mrz_date(d):
 
 
 def calculate_age(d):
+
     birth=fix_mrz_date(d)
     if not birth:
         return None,""
@@ -82,7 +87,7 @@ def get_title(age, gender):
     if age < 12:
         return "CHD"
 
-    if gender=="F":
+    if gender == "F":
         return "MRS"
 
     return "MR"
@@ -102,33 +107,43 @@ if files:
 
     for f in files:
 
-        img=Image.open(f)
-        mrz=read_mrz(img)
+        # -------- FIXED IMAGE LOAD (CLOUD SAFE) --------
+        file_bytes = np.asarray(bytearray(f.read()), dtype=np.uint8)
+        img = cv2.imdecode(file_bytes, 1)
+
+        if img is None:
+            st.warning("Image not readable")
+            continue
+
+        try:
+            mrz = read_mrz(img)
+        except:
+            mrz = None
 
         if not mrz:
             st.warning("MRZ not detected")
             continue
 
-        d=mrz.to_dict()
+        d = mrz.to_dict()
 
-        surname=clean_name(d.get("surname"))
-        given=clean_name(d.get("names"))
+        surname = clean_name(d.get("surname"))
+        given = clean_name(d.get("names"))
 
-        passport=d.get("number")
-        dob_raw=d.get("date_of_birth")
-        exp_raw=d.get("expiration_date")
-        gender=d.get("sex")
+        passport = d.get("number")
+        dob_raw = d.get("date_of_birth")
+        exp_raw = d.get("expiration_date")
+        gender = d.get("sex")
 
-        age,dob=calculate_age(dob_raw)
+        age, dob = calculate_age(dob_raw)
 
         expiry=""
-        exp=fix_mrz_date(exp_raw)
+        exp = fix_mrz_date(exp_raw)
         if exp:
-            expiry=exp.strftime("%d%b%y").upper()
+            expiry = exp.strftime("%d%b%y").upper()
 
-        title=get_title(age,gender)
+        title = get_title(age, gender)
 
-        key=passport+dob
+        key = passport + dob
         if key in seen:
             continue
         seen.add(key)
@@ -139,11 +154,7 @@ if files:
             "title":title,
             "passport":passport,
             "dob":dob,
-            "expiry":expiry,
-            "father":"",
-            "pob":"",
-            "issue":"",
-            "cnic":""
+            "expiry":expiry
         })
 
     # ================= DISPLAY =================
@@ -160,11 +171,7 @@ if files:
         Title: {p['title']}<br>
         Passport: {p['passport']}<br>
         DOB: {p['dob']}<br>
-        Expiry: {p['expiry']}<br>
-        Father/Husband Name: {p['father']}<br>
-        Place of Birth: {p['pob']}<br>
-        Date of Issue: {p['issue']}<br>
-        CNIC: {p['cnic']}
+        Expiry: {p['expiry']}
         </div>
         """, unsafe_allow_html=True)
 
