@@ -8,19 +8,17 @@ import uuid
 import re
 import streamlit.components.v1 as components
 
-# ================= TESSERACT AUTO =================
+# ================= TESSERACT =================
 if os.name == "nt":
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 else:
     pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
-# ================= PAGE CONFIG =================
 st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
 
-# ================= HEADER + STYLE =================
+# ================= HEADER =================
 st.markdown("""
 <style>
-
 .stApp { background-color:#f4f7fb; }
 
 .header-bar {
@@ -31,7 +29,6 @@ st.markdown("""
     display:flex;
     justify-content:space-between;
     align-items:center;
-    box-shadow:0 3px 8px rgba(0,0,0,0.15);
 }
 
 .header-title {
@@ -70,7 +67,6 @@ st.markdown("""
     border-radius:12px;
     border-left:5px solid #37b24d;
 }
-
 </style>
 
 <div class="header-bar">
@@ -100,7 +96,7 @@ def calculate_age(d):
     age=today.year-birth.year-((today.month,today.day)<(birth.month,birth.day))
     return age,birth.strftime("%d%b%y").upper()
 
-def passenger_title(age,gender,dob):
+def passenger_title(age, gender, dob):
     if age >= 12:
         return "MR" if gender=="M" else "MRS"
     elif age >= 2:
@@ -112,17 +108,9 @@ def parse_mrz_names(surname,names):
     surname=surname.replace("<","").strip().upper()
     names=names.replace("<"," ")
     names=" ".join(names.split())
+    return surname,names
 
-    clean=[]
-    for w in names.split():
-        if len(w)<=1: continue
-        if len(set(w))==1: continue
-        if w.count("K")>len(w)*0.5: continue
-        clean.append(w)
-
-    return surname," ".join(clean)
-
-# ================= OCR EXTRA DATA =================
+# ================= OCR EXTRA =================
 def extract_extra_fields(path):
 
     img=cv2.imread(path)
@@ -156,15 +144,6 @@ def extract_extra_fields(path):
 
     return father,pob,doi,cnic
 
-# ================= IMAGE ROTATE =================
-def auto_rotate(path):
-    img=cv2.imread(path)
-    if img is None: return
-    h,w=img.shape[:2]
-    if h>w:
-        img=cv2.rotate(img,cv2.ROTATE_90_CLOCKWISE)
-    cv2.imwrite(path,img)
-
 # ================= UPLOAD =================
 files=st.file_uploader(
     "Upload Passport Images",
@@ -184,12 +163,7 @@ if files:
         with open(temp,"wb") as fp:
             fp.write(f.getbuffer())
 
-        auto_rotate(temp)
-
-        try:
-            mrz=read_mrz(temp)
-        except:
-            mrz=None
+        mrz=read_mrz(temp)
 
         if mrz:
 
@@ -197,8 +171,6 @@ if files:
             passport=d.get("number","")
 
             if passport in seen:
-                st.warning(f"Duplicate skipped: {passport}")
-                os.remove(temp)
                 continue
 
             seen.add(passport)
@@ -214,17 +186,19 @@ if files:
             age,dob=calculate_age(d.get("date_of_birth"))
             exp=safe_date(d.get("expiration_date"))
 
+            title=passenger_title(age,gender,dob)
+
             father,pob,doi,cnic=extract_extra_fields(temp)
 
             passengers.append({
                 "surname":surname,
-                "names":names,
+                "given":names,
+                "title":title,
                 "passport":passport,
                 "dob":dob,
                 "exp":exp,
                 "gender":gender,
                 "country":country,
-                "age":age,
                 "father":father,
                 "pob":pob,
                 "doi":doi,
@@ -244,7 +218,9 @@ if passengers:
     for i,p in enumerate(passengers,1):
 
         st.markdown('<div class="passport-box">',unsafe_allow_html=True)
-        st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+        st.write("Surname:",p["surname"])
+        st.write("Given Name:",p["given"])
+        st.write("Title:",p["title"])
         st.write("Passport:",p["passport"])
         st.write("DOB:",p["dob"])
         st.write("Expiry:",p["exp"])
@@ -257,14 +233,14 @@ if passengers:
     pax=1
     for p in passengers:
 
-        title=passenger_title(p["age"],p["gender"],p["dob"])
-
-        nm1_lines.append(f"NM1{p['surname']}/{p['names']} {title}")
+        nm1_lines.append(
+            f"NM1{p['surname']}/{p['given']} {p['title']}"
+        )
 
         docs_lines.append(
             f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
             f"{p['country']}-{p['dob']}-{p['gender']}-"
-            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}"
+            f"{p['exp']}-{p['surname']}-{p['given'].replace(' ','-')}-H/P{pax}"
         )
         pax+=1
 
@@ -286,12 +262,3 @@ if passengers:
         file_name="amadeus_pnr.txt",
         mime="text/plain"
     )
-
-    components.html(f"""
-    <button style="background:#1c7ed6;color:white;
-    padding:10px 18px;border:none;border-radius:6px;
-    font-size:16px;cursor:pointer;"
-    onclick="navigator.clipboard.writeText(`{export_text}`)">
-    📋 Copy PNR to Clipboard
-    </button>
-    """, height=60)
