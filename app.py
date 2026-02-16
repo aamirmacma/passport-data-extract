@@ -1,10 +1,15 @@
 import streamlit as st
 
 # ================= PAGE CONFIG =================
-st.set_page_config(
-    page_title="Amadeus Auto PNR Builder",
-    layout="wide",
-    initial_sidebar_state="expanded"
+<div class="header-bar">
+    <div>
+        <div class="header-title">✈️ Passport | Photo | Auto Builder</div>
+        <div style="color:white;font-size:14px;margin-top:2px;">
+            Developed by Aamir Khan
+        </div>
+    </div>
+</div>
+
 )
 
 # ================= HEADER STYLE =================
@@ -76,3 +81,4 @@ st.markdown("""
 
 </div>
 """, unsafe_allow_html=True)
+
