@@ -1,26 +1,30 @@
 import streamlit as st
 
+# ===== IMPORT YOUR PAGES =====
+import Passport_Auto_PNR
+import Passport_Photo_Maker
+import Passport_Size_Maker
+
+
 # ================= PAGE CONFIG =================
 st.set_page_config(
     page_title="Amadeus Auto PNR Builder",
     layout="wide"
 )
 
-# ================= STYLE =================
+# ================= HEADER =================
 st.markdown("""
 <style>
-
 .stApp { background-color:#f4f7fb; }
 
 .header-bar {
     background: linear-gradient(90deg,#0b5394,#1c7ed6);
     padding:14px 20px;
     border-radius:12px;
-    margin-bottom:25px;
+    margin-bottom:20px;
     display:flex;
     justify-content:space-between;
     align-items:center;
-    box-shadow:0 3px 8px rgba(0,0,0,0.15);
 }
 
 .header-title {
@@ -37,14 +41,6 @@ st.markdown("""
     font-size:14px;
     font-weight:600;
 }
-
-.home-box {
-    background:white;
-    padding:25px;
-    border-radius:12px;
-    box-shadow:0 2px 6px rgba(0,0,0,0.08);
-}
-
 </style>
 
 <div class="header-bar">
@@ -53,24 +49,23 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ================= HOME CONTENT =================
 
-st.markdown('<div class="home-box">', unsafe_allow_html=True)
+# ================= TABS =================
+tab1, tab2, tab3 = st.tabs([
+    "🛂 Passport Auto PNR",
+    "📷 Passport Photo Maker",
+    "📏 Passport Size Maker"
+])
 
-st.title("Welcome")
 
-st.write("""
-This is the home page of Amadeus Auto PNR Builder.
+# ===== TAB 1 =====
+with tab1:
+    Passport_Auto_PNR.app()
 
-Use the left sidebar to open different tools:
+# ===== TAB 2 =====
+with tab2:
+    Passport_Photo_Maker.app()
 
-✅ Passport Auto PNR Builder  
-✅ Passport Photo Maker  
-✅ Passport Size Maker  
-
-Each tool works on a separate page.
-""")
-
-st.info("Select a page from the sidebar to start.")
-
-st.markdown('</div>', unsafe_allow_html=True)
+# ===== TAB 3 =====
+with tab3:
+    Passport_Size_Maker.app()
