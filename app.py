@@ -1,10 +1,8 @@
 import streamlit as st
 
-# ===== IMPORT YOUR PAGES =====
 import Passport_Auto_PNR
 import Passport_Photo_Maker
 import Passport_Size_Maker
-
 
 # ================= PAGE CONFIG =================
 st.set_page_config(
@@ -49,7 +47,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
 # ================= TABS =================
 tab1, tab2, tab3 = st.tabs([
     "🛂 Passport Auto PNR",
@@ -57,15 +54,11 @@ tab1, tab2, tab3 = st.tabs([
     "📏 Passport Size Maker"
 ])
 
-
-# ===== TAB 1 =====
 with tab1:
     Passport_Auto_PNR.app()
 
-# ===== TAB 2 =====
 with tab2:
     Passport_Photo_Maker.app()
 
-# ===== TAB 3 =====
 with tab3:
     Passport_Size_Maker.app()
