@@ -2,122 +2,93 @@ import streamlit as st
 from PIL import Image
 import io
 
+# ==========================================
+# PASSPORT PHOTO MAKER (HAJI PHOTO SYSTEM)
+# ==========================================
 
-# ============================================
-# MAIN FUNCTION
-# ============================================
 def run():
 
-    st.title("📷 Passport Photo Maker (Haji Format)")
+    st.title("📷 Passport Photo Maker")
 
     st.info("""
-NOTE:
-Haji picture must be in JPG format.
+    NOTE:
 
-• Only ONE photo allowed per Haji  
-• Width range: 70 – 165 px  
-• Height range: 65 – 185 px  
-• File size range: 5KB – 12KB  
-""")
+    ✅ JPG format required  
+    ✅ Width range: 70 – 165 px  
+    ✅ Height range: 65 – 185 px  
+    ✅ File size: 5KB – 12KB  
+    """)
 
-    # ============================================
-    # FILE UPLOAD
-    # ============================================
-
-    uploaded_file = st.file_uploader(
-        "Upload Passport Photo (JPG only)",
+    uploaded = st.file_uploader(
+        "Upload Photo",
         type=["jpg", "jpeg"]
     )
 
-    if uploaded_file is None:
-        return
+    if uploaded:
 
-    image = Image.open(uploaded_file).convert("RGB")
+        img = Image.open(uploaded).convert("RGB")
 
-    st.subheader("Original Image")
-    st.image(image, width=200)
+        # -----------------------------
+        # TARGET SAFE SIZE
+        # -----------------------------
+        target_width = 140
+        target_height = 160
 
-    # ============================================
-    # AUTO RESIZE FUNCTION
-    # ============================================
+        # Keep aspect ratio
+        img.thumbnail((target_width, target_height), Image.LANCZOS)
 
-    def resize_to_haji_standard(img):
+        # Create white background
+        final_img = Image.new("RGB", (target_width, target_height), (255,255,255))
 
-        # target safe size inside allowed range
-        target_width = 120
-        target_height = 150
+        # center paste
+        x = (target_width - img.width) // 2
+        y = (target_height - img.height) // 2
+        final_img.paste(img, (x, y))
 
-        img = img.resize((target_width, target_height))
+        # -----------------------------
+        # FILE SIZE CONTROL (5-12 KB)
+        # -----------------------------
+        final_bytes = None
+        final_size = 0
 
-        return img
-
-
-    # ============================================
-    # FILE SIZE CONTROL
-    # ============================================
-
-    def compress_to_size(img):
-
-        min_size = 5 * 1024
-        max_size = 12 * 1024
-
-        quality = 95
-
-        while quality > 10:
+        for quality in range(95, 20, -5):
 
             buffer = io.BytesIO()
-            img.save(buffer, format="JPEG", quality=quality)
+            final_img.save(buffer, format="JPEG", quality=quality, optimize=True)
 
-            size = buffer.tell()
+            size_kb = len(buffer.getvalue()) / 1024
 
-            if min_size <= size <= max_size:
-                return buffer, size
-
-            quality -= 5
+            if 5 <= size_kb <= 12:
+                final_bytes = buffer.getvalue()
+                final_size = size_kb
+                break
 
         # fallback
-        buffer = io.BytesIO()
-        img.save(buffer, format="JPEG", quality=40)
-        return buffer, buffer.tell()
+        if final_bytes is None:
+            buffer = io.BytesIO()
+            final_img.save(buffer, format="JPEG", quality=40, optimize=True)
+            final_bytes = buffer.getvalue()
+            final_size = len(final_bytes) / 1024
 
+        # -----------------------------
+        # PREVIEW
+        # -----------------------------
+        st.image(final_img, caption="Passport Photo Preview")
 
-    # ============================================
-    # PROCESS IMAGE
-    # ============================================
+        st.success(f"Final Size: {round(final_size,2)} KB")
 
-    processed_img = resize_to_haji_standard(image)
-    buffer, final_size = compress_to_size(processed_img)
+        if final_size < 5:
+            st.warning("⚠ File size 5KB se kam hai")
 
-    final_size_kb = round(final_size / 1024, 2)
+        if final_size > 12:
+            st.warning("⚠ File size 12KB se zyada hai")
 
-    st.subheader("Processed Photo")
-    st.image(processed_img, width=200)
-
-    st.success(
-        f"Final Size: {processed_img.width}px × {processed_img.height}px | "
-        f"{final_size_kb} KB"
-    )
-
-    # ============================================
-    # VALIDATION
-    # ============================================
-
-    if not (70 <= processed_img.width <= 165):
-        st.error("Width not in allowed range")
-
-    if not (65 <= processed_img.height <= 185):
-        st.error("Height not in allowed range")
-
-    if not (5 <= final_size_kb <= 12):
-        st.error("File size not in allowed range (5–12KB)")
-
-    # ============================================
-    # DOWNLOAD BUTTON
-    # ============================================
-
-    st.download_button(
-        label="⬇ Download Haji Photo (JPG)",
-        data=buffer.getvalue(),
-        file_name="haji_photo.jpg",
-        mime="image/jpeg"
-    )
+        # -----------------------------
+        # DOWNLOAD
+        # -----------------------------
+        st.download_button(
+            "⬇ Download Photo",
+            data=final_bytes,
+            file_name="passport_photo.jpg",
+            mime="image/jpeg"
+        )
