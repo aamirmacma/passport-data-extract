@@ -9,52 +9,48 @@ import re
 import streamlit.components.v1 as components
 
 
-# ================= TESSERACT =================
-if os.name == "nt":
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-else:
-    pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+def app():
 
+    # ================= TESSERACT AUTO =================
+    if os.name == "nt":
+        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    else:
+        pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
-# ================= HEADER =================
-st.markdown("""
-<style>
-.stApp { background:#f4f7fb; }
-.header-bar{
-background:linear-gradient(90deg,#0b5394,#1c7ed6);
-padding:14px 20px;
-border-radius:12px;
-margin-bottom:20px;
-display:flex;
-justify-content:space-between;
-align-items:center;
-color:white;
-font-weight:700;
-font-size:24px;
-}
-.passport-box{
-background:white;
-padding:15px;
-border-radius:12px;
-border-left:5px solid #1c7ed6;
-margin-bottom:10px;
-}
-</style>
+    # ================= STYLE =================
+    st.markdown("""
+    <style>
 
-<div class="header-bar">
-✈️ Passport Auto PNR Builder
-</div>
-""", unsafe_allow_html=True)
+    .passport-box {
+        background:white;
+        padding:15px;
+        border-radius:12px;
+        border-left:5px solid #1c7ed6;
+        margin-bottom:10px;
+    }
 
+    .nm1-box {
+        background:#eef5ff;
+        padding:15px;
+        border-radius:12px;
+        border-left:5px solid #2f9e44;
+    }
 
-# ================= DATE FUNCTIONS =================
+    .docs-box {
+        background:#f1fff5;
+        padding:15px;
+        border-radius:12px;
+        border-left:5px solid #37b24d;
+    }
 
-def mrz_date_fix(d):
-    try:
-        if not d or len(str(d)) < 6:
-            return None
+    </style>
+    """, unsafe_allow_html=True)
 
-        d = str(d)
+    st.subheader("Upload Passport Images")
+
+    # ================= FUNCTIONS =================
+
+    def mrz_date_fix(d):
         y = int(d[:2])
         m = int(d[2:4])
         da = int(d[4:6])
@@ -65,180 +61,216 @@ def mrz_date_fix(d):
             y += 2000
 
         return datetime.datetime(y, m, da)
-    except:
-        return None
 
+    def safe_date(d):
+        return mrz_date_fix(d).strftime("%d%b%y").upper()
 
-def safe_date(d):
-    dt = mrz_date_fix(d)
-    return "" if dt is None else dt.strftime("%d%b%y").upper()
+    def calculate_age(d):
+        birth = mrz_date_fix(d)
+        today = datetime.datetime.today()
+        age = today.year - birth.year - (
+            (today.month, today.day) < (birth.month, birth.day)
+        )
+        return age, birth.strftime("%d%b%y").upper()
 
+    def passenger_title(age, gender, dob):
+        if age >= 12:
+            return "MR" if gender == "M" else "MRS"
+        elif age >= 2:
+            return f"MSTR(CHD/{dob})" if gender == "M" else f"MISS(CHD/{dob})"
+        else:
+            return "INF"
 
-def calculate_age(d):
-    birth = mrz_date_fix(d)
-    if birth is None:
-        return 0, ""
+    def parse_mrz_names(surname, names):
+        surname = surname.replace("<", "").strip().upper()
+        names = names.replace("<", " ")
+        names = " ".join(names.split())
 
-    today = datetime.datetime.today()
-    age = today.year - birth.year - (
-        (today.month, today.day) < (birth.month, birth.day)
-    )
-
-    return age, birth.strftime("%d%b%y").upper()
-
-
-# ================= TITLE =================
-
-def passenger_title(age, gender):
-    if age >= 12:
-        return "MR" if gender == "M" else "MRS"
-    elif age >= 2:
-        return "CHD"
-    return "INF"
-
-
-# ================= NAME CLEANER (FIXED) =================
-
-def clean_word(w):
-    w = w.strip()
-
-    # remove single letters
-    if len(w) <= 1:
-        return False
-
-    # remove KKKKK or same letters
-    if len(set(w)) == 1:
-        return False
-
-    # remove words with too many K
-    if w.count("K") > len(w) * 0.5:
-        return False
-
-    return True
-
-
-def parse_mrz_names(surname, names):
-
-    surname = surname.replace("<", "").strip().upper()
-
-    names = names.replace("<", " ")
-    words = names.split()
-
-    clean = []
-    for w in words:
-        w = w.strip().upper()
-        if clean_word(w):
+        clean = []
+        for w in names.split():
+            if len(w) <= 1:
+                continue
+            if len(set(w)) == 1:
+                continue
+            if w.count("K") > len(w) * 0.5:
+                continue
             clean.append(w)
 
-    return surname, " ".join(clean)
+        return surname, " ".join(clean)
 
+    def extract_extra_fields(path):
 
-# ================= ROTATE =================
+        img = cv2.imread(path)
+        if img is None:
+            return "", "", "", ""
 
-def auto_rotate(path):
-    img = cv2.imread(path)
-    if img is None:
-        return
-    h, w = img.shape[:2]
-    if h > w:
-        img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-    cv2.imwrite(path, img)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        text = pytesseract.image_to_string(gray)
 
+        father = ""
+        pob = ""
+        doi = ""
+        cnic = ""
 
-# ================= UPLOAD =================
+        lines = text.upper().split("\n")
 
-files = st.file_uploader(
-    "Upload Passport Images",
-    type=["jpg", "jpeg", "png"],
-    accept_multiple_files=True
-)
+        for i, line in enumerate(lines):
 
-passengers = []
-seen = set()
+            if "FATHER" in line or "HUSBAND" in line:
+                if i + 1 < len(lines):
+                    father = lines[i + 1].strip()
 
-if files:
+            if "PLACE OF BIRTH" in line:
+                if i + 1 < len(lines):
+                    pob = lines[i + 1].strip()
 
-    for f in files:
+            if "DATE OF ISSUE" in line:
+                if i + 1 < len(lines):
+                    doi = lines[i + 1].strip()
 
-        temp = f"temp_{uuid.uuid4().hex}.jpg"
+            m = re.search(r"\d{5}-\d{7}-\d", line)
+            if m:
+                cnic = m.group()
 
-        with open(temp, "wb") as fp:
-            fp.write(f.getbuffer())
+        return father, pob, doi, cnic
 
-        auto_rotate(temp)
+    def auto_rotate(path):
+        img = cv2.imread(path)
+        if img is None:
+            return
+        h, w = img.shape[:2]
+        if h > w:
+            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+        cv2.imwrite(path, img)
 
-        try:
-            mrz = read_mrz(temp)
-        except:
-            mrz = None
+    # ================= UPLOAD =================
 
-        if not mrz:
-            st.warning("MRZ not detected")
+    files = st.file_uploader(
+        "Upload Passport Images",
+        type=["jpg", "jpeg", "png"],
+        accept_multiple_files=True
+    )
+
+    passengers = []
+    seen = set()
+
+    if files:
+
+        for f in files:
+
+            temp = f"temp_{uuid.uuid4().hex}.jpg"
+
+            with open(temp, "wb") as fp:
+                fp.write(f.getbuffer())
+
+            auto_rotate(temp)
+
+            try:
+                mrz = read_mrz(temp)
+            except:
+                mrz = None
+
+            if mrz:
+
+                d = mrz.to_dict()
+                passport = d.get("number", "")
+
+                if passport in seen:
+                    st.warning(f"Duplicate skipped: {passport}")
+                    os.remove(temp)
+                    continue
+
+                seen.add(passport)
+
+                surname, names = parse_mrz_names(
+                    d.get("surname", ""),
+                    d.get("names", "")
+                )
+
+                gender = d.get("sex", "M")
+                country = d.get("country", "")
+
+                age, dob = calculate_age(d.get("date_of_birth"))
+                exp = safe_date(d.get("expiration_date"))
+
+                father, pob, doi, cnic = extract_extra_fields(temp)
+
+                passengers.append({
+                    "surname": surname,
+                    "names": names,
+                    "passport": passport,
+                    "dob": dob,
+                    "exp": exp,
+                    "gender": gender,
+                    "country": country,
+                    "age": age,
+                    "father": father,
+                    "pob": pob,
+                    "doi": doi,
+                    "cnic": cnic
+                })
+
             os.remove(temp)
-            continue
 
-        d = mrz.to_dict()
-        passport = d.get("number", "")
-
-        if passport in seen:
-            st.warning(f"Duplicate skipped: {passport}")
-            os.remove(temp)
-            continue
-
-        seen.add(passport)
-
-        surname, names = parse_mrz_names(
-            d.get("surname", ""),
-            d.get("names", "")
-        )
-
-        age, dob = calculate_age(d.get("date_of_birth"))
-        exp = safe_date(d.get("expiration_date"))
-
-        passengers.append({
-            "surname": surname,
-            "names": names,
-            "title": passenger_title(age, d.get("sex", "M")),
-            "passport": passport,
-            "dob": dob,
-            "exp": exp,
-            "gender": d.get("sex", "M"),
-            "country": d.get("country", "")
-        })
-
-        os.remove(temp)
-
-
-# ================= OUTPUT =================
-
-if passengers:
-
-    st.subheader("Extracted Passport Details")
+    # ================= OUTPUT =================
 
     nm1_lines = []
     docs_lines = []
 
-    for i, p in enumerate(passengers, 1):
+    if passengers:
 
-        st.markdown('<div class="passport-box">', unsafe_allow_html=True)
-        st.write(f"Passenger {i}: {p['surname']} {p['names']}")
-        st.write("Passport:", p["passport"])
-        st.write("DOB:", p["dob"])
-        st.write("Expiry:", p["exp"])
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.subheader("Extracted Passport Details")
 
-        nm1_lines.append(
-            f"NM1{p['surname']}/{p['names']} {p['title']}"
+        for i, p in enumerate(passengers, 1):
+
+            st.markdown('<div class="passport-box">', unsafe_allow_html=True)
+            st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+            st.write("Passport:", p["passport"])
+            st.write("DOB:", p["dob"])
+            st.write("Expiry:", p["exp"])
+            st.write("Father/Husband Name:", p["father"])
+            st.write("Place of Birth:", p["pob"])
+            st.write("Date of Issue:", p["doi"])
+            st.write("CNIC:", p["cnic"])
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        pax = 1
+        for p in passengers:
+
+            title = passenger_title(p["age"], p["gender"], p["dob"])
+
+            nm1_lines.append(
+                f"NM1{p['surname']}/{p['names']} {title}"
+            )
+
+            docs_lines.append(
+                f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+                f"{p['country']}-{p['dob']}-{p['gender']}-"
+                f"{p['exp']}-{p['surname']}-"
+                f"{p['names'].replace(' ','-')}-H/P{pax}"
+            )
+            pax += 1
+
+        export_text = "\n".join(nm1_lines) + "\n\n" + "\n".join(docs_lines)
+
+        st.subheader("NM1 Entries")
+        st.code("\n".join(nm1_lines))
+
+        st.subheader("SRDOCS Entries")
+        st.code("\n".join(docs_lines))
+
+        st.download_button(
+            "⬇ Download Amadeus PNR (TXT)",
+            data=export_text,
+            file_name="amadeus_pnr.txt",
+            mime="text/plain"
         )
 
-        docs_lines.append(
-            f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
-            f"{p['country']}-{p['dob']}-{p['gender']}-"
-            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{i}"
-        )
-
-    st.subheader("NM1 Entries")
-    st.code("\n".join(nm1_lines))
-
-    st.subheader("SRDOCS Entries")
-    st.code("\n".join(docs_lines))
+        components.html(f"""
+        <button style="background:#1c7ed6;color:white;
+        padding:10px 18px;border:none;border-radius:6px;
+        font-size:16px;cursor:pointer;"
+        onclick="navigator.clipboard.writeText(`{export_text}`)">
+        📋 Copy PNR to Clipboard
+        </button>
+        """, height=60)
