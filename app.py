@@ -180,7 +180,7 @@ tab1, tab2 = st.tabs(["📘 Passport Auto PNR", "📷 Passport Photo Maker"])
 # =========================================================
 with tab1:
 
-    files=st.file_uploader(
+    files = st.file_uploader(
         "Upload Passport Images",
         type=["jpg","jpeg","png"],
         accept_multiple_files=True
@@ -197,7 +197,24 @@ with tab1:
             with open(temp,"wb") as fp:
                 fp.write(f.getbuffer())
 
-            mrz=read_mrz_fast(temp)
+            # ---------- TRY NORMAL MRZ ----------
+            mrz=None
+            try:
+                mrz=read_mrz(temp)
+            except:
+                pass
+
+            # ---------- TRY BOTTOM MRZ ----------
+            if not mrz:
+                img=cv2.imread(temp)
+                if img is not None:
+                    h,w=img.shape[:2]
+                    crop=img[int(h*0.65):h,0:w]
+                    cv2.imwrite(temp+"_mrz.jpg",crop)
+                    try:
+                        mrz=read_mrz(temp+"_mrz.jpg")
+                    except:
+                        pass
 
             if not mrz:
                 st.warning("MRZ not detected")
@@ -221,6 +238,8 @@ with tab1:
             age,dob=calculate_age(d.get("date_of_birth"))
             exp=safe_date(d.get("expiration_date"))
 
+            title=passenger_title(age,gender)
+
             father,pob,doi,cnic=extract_extra_fields(temp)
 
             passengers.append({
@@ -231,7 +250,7 @@ with tab1:
                 "exp":exp,
                 "gender":gender,
                 "country":country,
-                "age":age,
+                "title":title,
                 "father":father,
                 "pob":pob,
                 "doi":doi,
@@ -239,6 +258,8 @@ with tab1:
             })
 
             os.remove(temp)
+
+    # ================= OUTPUT =================
 
     nm1_lines=[]
     docs_lines=[]
@@ -250,19 +271,25 @@ with tab1:
         for i,p in enumerate(passengers,1):
 
             st.markdown('<div class="box">',unsafe_allow_html=True)
-            st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+
+            st.write(f"Passenger {i}")
+            st.write("Surname:",p["surname"])
+            st.write("Given Name:",p["names"])
+            st.write("Title:",p["title"])
             st.write("Passport:",p["passport"])
             st.write("DOB:",p["dob"])
             st.write("Expiry:",p["exp"])
+            st.write("Father/Husband:",p["father"])
+            st.write("Place of Birth:",p["pob"])
+            st.write("CNIC:",p["cnic"])
+
             st.markdown('</div>',unsafe_allow_html=True)
 
         pax=1
         for p in passengers:
 
-            title=passenger_title(p["age"],p["gender"])
-
             nm1_lines.append(
-                f"NM1{p['surname']}/{p['names']} {title}"
+                f"NM1{p['surname']}/{p['names']} {p['title']}"
             )
 
             docs_lines.append(
@@ -286,6 +313,7 @@ with tab1:
             file_name="amadeus_pnr.txt"
         )
 
+
 # =========================================================
 # ================= TAB 2 PHOTO ===========================
 # =========================================================
@@ -308,3 +336,4 @@ with tab2:
             file_name="passport_photo.jpg",
             mime="image/jpeg"
         )
+
