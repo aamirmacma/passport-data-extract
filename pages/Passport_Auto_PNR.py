@@ -9,12 +9,13 @@ import os
 
 def mrz_date_fix(d):
 
-    # MRZ date missing ho to
-    if d is None:
+    # agar MRZ date missing hai
+    if not d:
         return None
 
     d = str(d)
 
+    # invalid length
     if len(d) < 6:
         return None
 
@@ -72,7 +73,7 @@ def passenger_title(age, gender):
         return "INF"
 
 
-# ================= MAIN =================
+# ================= MAIN RUN =================
 
 def run():
 
@@ -92,7 +93,6 @@ def run():
 
     for f in files:
 
-        # ===== TEMP SAVE SAFE =====
         temp_file = f"temp_{uuid.uuid4().hex}.jpg"
 
         try:
@@ -102,7 +102,6 @@ def run():
             st.error("File read error")
             continue
 
-        # ===== MRZ READ =====
         try:
             mrz = read_mrz(temp_file)
         except:
@@ -145,8 +144,6 @@ def run():
         })
 
         os.remove(temp_file)
-
-    # ================= OUTPUT =================
 
     if not passengers:
         return
