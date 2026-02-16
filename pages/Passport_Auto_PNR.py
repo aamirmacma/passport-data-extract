@@ -1,21 +1,18 @@
 import streamlit as st
 from passporteye import read_mrz
 import datetime
+import cv2
 import uuid
 import os
-import cv2
 
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="Passport Auto PNR", layout="wide")
 
-st.markdown("""
-<div style="background:#1c7ed6;padding:12px;border-radius:10px;color:white">
-<h3>✈️ Amadeus Auto PNR Builder</h3>
-</div>
-""", unsafe_allow_html=True)
+st.title("✈️ Passport Auto PNR")
 
+# ---------- FUNCTIONS ----------
 
 def mrz_date_fix(d):
-    if not d or len(d) < 6:
+    if not d:
         return None
     y=int(d[:2])
     m=int(d[2:4])
@@ -28,13 +25,30 @@ def mrz_date_fix(d):
 
     return datetime.datetime(y,m,da)
 
-
 def safe_date(d):
     dt = mrz_date_fix(d)
     if not dt:
         return ""
     return dt.strftime("%d%b%y").upper()
 
+def calculate_age(d):
+    birth=mrz_date_fix(d)
+    if not birth:
+        return 0,""
+
+    today=datetime.datetime.today()
+    age=today.year-birth.year-((today.month,today.day)<(birth.month,birth.day))
+    return age,birth.strftime("%d%b%y").upper()
+
+def passenger_title(age,gender):
+    if age >= 12:
+        return "MR" if gender=="M" else "MRS"
+    elif age >= 2:
+        return "CHD"
+    else:
+        return "INF"
+
+# ---------- UPLOAD ----------
 
 files = st.file_uploader(
     "Upload Passport Images",
@@ -42,8 +56,8 @@ files = st.file_uploader(
     accept_multiple_files=True
 )
 
-seen=set()
 passengers=[]
+seen=set()
 
 if files:
 
@@ -59,40 +73,66 @@ if files:
         except:
             mrz=None
 
-        if not mrz:
-            st.warning("MRZ not detected")
-            os.remove(temp)
-            continue
+        if mrz:
 
-        d=mrz.to_dict()
-        passport=d.get("number","")
+            d=mrz.to_dict()
+            passport=d.get("number","")
 
-        if passport in seen:
-            st.warning(f"Duplicate skipped: {passport}")
-            os.remove(temp)
-            continue
+            if passport in seen:
+                st.warning(f"Duplicate skipped: {passport}")
+                os.remove(temp)
+                continue
 
-        seen.add(passport)
+            seen.add(passport)
 
-        passengers.append({
-            "surname":d.get("surname",""),
-            "names":d.get("names","").replace("<"," "),
-            "passport":passport,
-            "dob":safe_date(d.get("date_of_birth")),
-            "exp":safe_date(d.get("expiration_date")),
-            "gender":d.get("sex","")
-        })
+            surname=d.get("surname","").replace("<"," ")
+            names=d.get("names","").replace("<"," ")
+
+            age,dob=calculate_age(d.get("date_of_birth"))
+            exp=safe_date(d.get("expiration_date"))
+
+            passengers.append({
+                "surname":surname,
+                "names":names,
+                "passport":passport,
+                "dob":dob,
+                "exp":exp,
+                "gender":d.get("sex","M"),
+                "country":d.get("country",""),
+                "age":age
+            })
 
         os.remove(temp)
 
+# ---------- OUTPUT ----------
 
 if passengers:
 
     st.subheader("Extracted Passport Details")
 
+    nm1=[]
+    docs=[]
+
     for i,p in enumerate(passengers,1):
+
+        title=passenger_title(p["age"],p["gender"])
+
         st.write(f"Passenger {i}: {p['surname']} {p['names']}")
         st.write("Passport:",p["passport"])
         st.write("DOB:",p["dob"])
         st.write("Expiry:",p["exp"])
         st.divider()
+
+        nm1.append(f"NM1{p['surname']}/{p['names']} {title}")
+
+        docs.append(
+            f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+            f"{p['country']}-{p['dob']}-{p['gender']}-"
+            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H"
+        )
+
+    st.subheader("NM1 Entries")
+    st.code("\n".join(nm1))
+
+    st.subheader("SRDOCS Entries")
+    st.code("\n".join(docs))
