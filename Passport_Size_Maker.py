@@ -2,79 +2,68 @@ import streamlit as st
 from PIL import Image
 import io
 
-# ==================================================
+# ===============================================
 # MAIN RUN FUNCTION
-# ==================================================
+# ===============================================
 def run():
 
-    st.title("📘 Passport Size Maker")
+    st.title("🛂 Passport Size Maker")
 
     st.info("""
     Upload full passport image.
-    
-    ✔ No auto cutting  
-    ✔ Image balance same rahega  
-    ✔ Auto resize to 1450 x 1010 px  
-    ✔ JPG output approx 450KB
+
+    ✔ Output Size: 1450 x 1010 px  
+    ✔ Format: JPG  
+    ✔ File Size: Minimum 450KB (less not allowed)
     """)
 
-    uploaded_file = st.file_uploader(
+    uploaded = st.file_uploader(
         "Upload Passport Image",
         type=["jpg", "jpeg", "png"]
     )
 
-    if uploaded_file:
+    if uploaded:
 
-        # ---------- LOAD IMAGE ----------
-        image = Image.open(uploaded_file).convert("RGB")
-
-        st.subheader("Original Image")
-        st.image(image, use_column_width=True)
+        img = Image.open(uploaded).convert("RGB")
 
         # ---------- RESIZE ----------
-        target_width = 1450
-        target_height = 1010
+        img = img.resize((1450, 1010), Image.LANCZOS)
 
-        resized = image.resize(
-            (target_width, target_height),
-            Image.LANCZOS
-        )
-
-        # ---------- COMPRESS TO ~450KB ----------
-        buffer = io.BytesIO()
+        # ---------- SAVE WITH SIZE CONTROL ----------
+        target_size = 450 * 1024   # 450 KB
 
         quality = 95
-        final_size_kb = 0
+        final_bytes = None
 
-        # quality reduce karte rahenge jab tak size near 450KB na ho
-        while quality > 20:
-            buffer.seek(0)
-            buffer.truncate()
+        # first compress down if too big
+        while quality >= 60:
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=quality, optimize=True)
+            size = buffer.tell()
 
-            resized.save(
-                buffer,
-                format="JPEG",
-                quality=quality,
-                optimize=True
-            )
-
-            final_size_kb = len(buffer.getvalue()) / 1024
-
-            if final_size_kb <= 450:
+            if size <= target_size:
+                final_bytes = buffer
                 break
 
             quality -= 5
 
-        # ---------- PREVIEW ----------
-        st.subheader("Resized Output (1450 x 1010)")
-        st.image(resized, use_column_width=True)
+        # if size became smaller than 450KB, increase quality again
+        if final_bytes is not None:
+            while final_bytes.tell() < target_size and quality < 100:
+                quality += 1
+                buffer = io.BytesIO()
+                img.save(buffer, format="JPEG", quality=quality)
+                final_bytes = buffer
 
-        st.success(f"Final Size: {int(final_size_kb)} KB")
+        st.image(img, caption="Preview", use_column_width=True)
 
-        # ---------- DOWNLOAD ----------
+        size_kb = round(final_bytes.tell() / 1024, 2)
+
+        st.success(f"Final Size: {size_kb} KB")
+
         st.download_button(
-            "⬇ Download Passport Image",
-            data=buffer.getvalue(),
-            file_name="passport_resized.jpg",
+            "⬇ Download Passport Size",
+            data=final_bytes.getvalue(),
+            file_name="passport_1450x1010.jpg",
             mime="image/jpeg"
         )
