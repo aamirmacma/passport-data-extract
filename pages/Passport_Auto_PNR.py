@@ -89,6 +89,7 @@ def calculate_age(d):
     age = today.year - birth.year - (
         (today.month, today.day) < (birth.month, birth.day)
     )
+
     return age, birth.strftime("%d%b%y").upper()
 
 
@@ -101,26 +102,23 @@ def passenger_title(age, gender):
         return "INF"
 
 
-# ===== NAME CLEANER (KKKKKK / MR FIX) =====
+# ===== NAME CLEANER =====
 def parse_mrz_names(surname, names):
 
-    REMOVE_WORDS = ["MR","MRS","MISS","MASTER"]
+    REMOVE = ["MR","MRS","MISS","MASTER"]
 
     surname = surname.replace("<","").strip().upper()
     names = names.replace("<"," ").upper()
-    words = names.split()
 
     clean = []
+    for w in names.split():
 
-    for w in words:
-
-        if w in REMOVE_WORDS:
+        if w in REMOVE:
             continue
 
         if len(w) <= 1:
             continue
 
-        # KKKKKK or repeated letters
         if len(set(w)) == 1:
             continue
 
@@ -150,14 +148,14 @@ files = st.file_uploader(
     accept_multiple_files=True
 )
 
-passengers = []
-seen = set()
+passengers=[]
+seen=set()
 
 if files:
 
     for f in files:
 
-        temp = f"temp_{uuid.uuid4().hex}.jpg"
+        temp=f"temp_{uuid.uuid4().hex}.jpg"
 
         with open(temp,"wb") as fp:
             fp.write(f.getbuffer())
@@ -213,20 +211,15 @@ if files:
 
 # ================= OUTPUT =================
 
-nm1_lines=[]
-docs_lines=[]
-
 if passengers:
+
+    nm1_lines=[]
+    docs_lines=[]
 
     st.subheader("Extracted Passport Details")
 
     for i,p in enumerate(passengers,1):
-
-        st.write(f"Passenger {i}: {p['surname']} {p['names']}")
-        st.write("Passport:",p["passport"])
-        st.write("DOB:",p["dob"])
-        st.write("Expiry:",p["exp"])
-        st.write("---")
+        st.write(f"{i}. {p['surname']} {p['names']} | {p['passport']}")
 
     pax=1
     for p in passengers:
@@ -256,11 +249,3 @@ if passengers:
         data=export_text,
         file_name="amadeus_pnr.txt"
     )
-
-    components.html(f"""
-    <button style="background:#1c7ed6;color:white;
-    padding:10px 18px;border:none;border-radius:6px;"
-    onclick="navigator.clipboard.writeText(`{export_text}`)">
-    📋 Copy PNR
-    </button>
-    """, height=60)
