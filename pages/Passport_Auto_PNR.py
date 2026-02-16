@@ -1,74 +1,98 @@
 import streamlit as st
 from passporteye import read_mrz
-from PIL import Image
-from datetime import datetime
-import pytesseract
+import datetime
+import uuid
+import os
+import cv2
 
-# Tesseract Path (Check karein agar aapka path yahi hai)
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+st.set_page_config(layout="wide")
 
-st.set_page_config(page_title="Amadeus Passport Extractor", layout="centered")
+st.markdown("""
+<div style="background:#1c7ed6;padding:12px;border-radius:10px;color:white">
+<h3>✈️ Amadeus Auto PNR Builder</h3>
+</div>
+""", unsafe_allow_html=True)
 
-st.title("✈️ Amadeus Passport Data Extractor")
-st.write("Passport ki photo upload karein aur Amadeus entries hasil karein.")
 
-def format_date(date_str):
-    try:
-        d = datetime.strptime(date_str, '%y%m%d')
-        return d.strftime('%d%b%y').upper()
-    except:
-        return date_str
+def mrz_date_fix(d):
+    if not d or len(d) < 6:
+        return None
+    y=int(d[:2])
+    m=int(d[2:4])
+    da=int(d[4:6])
 
-def get_title(gender, dob_raw):
-    birth_date = datetime.strptime(dob_raw, '%y%m%d')
-    today = datetime.now()
-    age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
-    
-    if age < 2: return "INF", "MI" if gender == 'M' else "FI"
-    if age < 12: return ("MSTR" if gender == 'M' else "MISS"), gender
-    return ("MR" if gender == 'M' else "MRS"), gender
+    if y > datetime.datetime.now().year % 100:
+        y += 1900
+    else:
+        y += 2000
 
-# File Upload Button
-uploaded_file = st.file_uploader("Passport Photo Select Karein...", type=['jpg', 'jpeg', 'png'])
+    return datetime.datetime(y,m,da)
 
-if uploaded_file is not None:
-    img = Image.open(uploaded_file)
-    st.image(img, caption="Uploaded Passport", width=300)
-    
-    with st.spinner('Data nikal raha hoon...'):
-        # MRZ Read karna
-        mrz = read_mrz(uploaded_file)
-        
-        if mrz:
-            d = mrz.to_dict()
-            
-            # Extracting Data
-            surname = d.get('surname', '').upper()
-            given_name = d.get('names', '').upper()
-            pp_no = d.get('number', '').upper()
-            nat = d.get('country', '').upper()
-            dob = d.get('date_of_birth', '')
-            exp = d.get('expiration_date', '')
-            gender = d.get('sex', 'M').upper()
-            
-            dob_fmt = format_date(dob)
-            exp_fmt = format_date(exp)
-            title, g_code = get_title(gender, dob)
 
-            # --- AMADEUS ENTRIES ---
-            nm1_entry = f"NM1{surname}/{given_name} {title}"
-            docs_entry = f"SRDOCS YY HK1-P-{nat}-{pp_no}-{nat}-{dob_fmt}-{g_code}-{exp_fmt}-{surname}-{given_name}-H/P1"
+def safe_date(d):
+    dt = mrz_date_fix(d)
+    if not dt:
+        return ""
+    return dt.strftime("%d%b%y").upper()
 
-            st.success("Data Extract Ho Gaya!")
 
-            # Name Entry Box
-            st.subheader("1. Name Entry (NM1)")
-            st.code(nm1_entry, language="bash")
-            
-            # Passport Entry Box
-            st.subheader("2. Passport Details (SRDOCS)")
-            st.code(docs_entry, language="bash")
-            
-            st.info("Upar diye gaye codes ko copy karke Amadeus mein paste karein.")
-        else:
-            st.error("Ghalti: Passport saaf nahi hai ya MRZ lines nahi mil rahi hain.")
+files = st.file_uploader(
+    "Upload Passport Images",
+    type=["jpg","jpeg","png"],
+    accept_multiple_files=True
+)
+
+seen=set()
+passengers=[]
+
+if files:
+
+    for f in files:
+
+        temp=f"temp_{uuid.uuid4().hex}.jpg"
+
+        with open(temp,"wb") as fp:
+            fp.write(f.getbuffer())
+
+        try:
+            mrz=read_mrz(temp)
+        except:
+            mrz=None
+
+        if not mrz:
+            st.warning("MRZ not detected")
+            os.remove(temp)
+            continue
+
+        d=mrz.to_dict()
+        passport=d.get("number","")
+
+        if passport in seen:
+            st.warning(f"Duplicate skipped: {passport}")
+            os.remove(temp)
+            continue
+
+        seen.add(passport)
+
+        passengers.append({
+            "surname":d.get("surname",""),
+            "names":d.get("names","").replace("<"," "),
+            "passport":passport,
+            "dob":safe_date(d.get("date_of_birth")),
+            "exp":safe_date(d.get("expiration_date")),
+            "gender":d.get("sex","")
+        })
+
+        os.remove(temp)
+
+
+if passengers:
+
+    st.subheader("Extracted Passport Details")
+
+    for i,p in enumerate(passengers,1):
+        st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+        st.write("Passport:",p["passport"])
+        st.write("DOB:",p["dob"])
+        st.write("Expiry:",p["exp"])
+        st.divider()
