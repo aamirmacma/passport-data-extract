@@ -2,167 +2,123 @@ import streamlit as st
 import pytesseract
 import cv2
 import numpy as np
-import re
 import tempfile
 import os
+import re
 
 
-# ==============================
+# =========================
 # TESSERACT PATH
-# ==============================
+# =========================
 if os.name == "nt":
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
-# ==============================
-# CLEAN TEXT FUNCTION
-# ==============================
-def clean_text(t):
-    if not t:
-        return ""
-    t = t.replace("|", "")
-    t = re.sub(r"\s+", " ", t)
-    return t.strip()
+# =========================
+# IMAGE PREPROCESS
+# =========================
+def preprocess(img):
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # sharpen
+    kernel = np.array([[0,-1,0],[-1,5,-1],[0,-1,0]])
+    gray = cv2.filter2D(gray, -1, kernel)
+
+    gray = cv2.resize(gray, None, fx=1.5, fy=1.5)
+    gray = cv2.GaussianBlur(gray,(3,3),0)
+
+    return gray
 
 
-# ==============================
-# FIELD FINDER
-# ==============================
-def find_value(text, label):
+# =========================
+# CLEAN TEXT
+# =========================
+def clean_line(line):
 
-    pattern = rf"{label}\s*[:\-]?\s*(.+)"
-    match = re.search(pattern, text, re.IGNORECASE)
-
-    if match:
-        value = match.group(1)
-        value = value.split("\n")[0]
-        return clean_text(value)
-
-    return ""
+    line = line.replace("|", "")
+    line = re.sub(r"\s+", " ", line)
+    return line.strip()
 
 
-# ==============================
-# CNIC FINDER
-# ==============================
-def extract_cnic(text):
+# =========================
+# FULL TEXT PARSER
+# =========================
+def extract_all_fields(text):
 
-    match = re.search(r"\d{5}-\d{7}-\d", text)
-    if match:
-        return match.group()
-    return ""
+    data = {}
+
+    lines = [clean_line(l) for l in text.split("\n") if l.strip()]
+
+    last_label = ""
+
+    for line in lines:
+
+        # detect label style line
+        if ":" in line:
+            parts = line.split(":",1)
+            label = parts[0].strip()
+            value = parts[1].strip()
+
+            data[label] = value
+            last_label = label
+
+        else:
+            # sometimes value comes next line
+            if last_label and last_label in data and data[last_label] == "":
+                data[last_label] = line
+
+    return data, lines
 
 
-# ==============================
-# DATE FINDER
-# ==============================
-def extract_date(text, label):
-
-    pattern = rf"{label}.*?(\d{{1,2}}\s+[A-Z]{{3}}\s+\d{{4}})"
-    match = re.search(pattern, text, re.IGNORECASE)
-
-    if match:
-        return match.group(1)
-
-    return ""
-
-
-# ==============================
-# MAIN RUN FUNCTION
-# ==============================
+# =========================
+# MAIN RUN
+# =========================
 def run():
 
-    st.title("🕋 Hajj Form Extractor")
+    st.title("🕋 Hajj Form Full Extractor")
 
     file = st.file_uploader(
-        "Upload Hajj Booking Form (JPG/PNG)",
-        type=["jpg", "jpeg", "png"]
+        "Upload Hajj Booking Form",
+        type=["jpg","jpeg","png"]
     )
 
     if not file:
         return
 
-    # save temp
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
         tmp.write(file.getbuffer())
         path = tmp.name
 
     img = cv2.imread(path)
+    processed = preprocess(img)
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.resize(gray, None, fx=1.5, fy=1.5)
-    gray = cv2.GaussianBlur(gray, (3,3), 0)
+    # FULL OCR
+    text = pytesseract.image_to_string(
+        processed,
+        config="--psm 6"
+    )
 
-    text = pytesseract.image_to_string(gray).upper()
+    text = text.upper()
 
-    # ==============================
-    # APPLICANT DATA
-    # ==============================
-    name = find_value(text, "NAME OF APPLICANT")
-    father = find_value(text, "FATHER / HUSBAND NAME")
-    passport = find_value(text, "PASSPORT NO")
-    occupation = find_value(text, "OCCUPATION")
-    country_stay = find_value(text, "COUNTRY STAY IN")
+    data, lines = extract_all_fields(text)
 
-    dob = extract_date(text, "DATE OF BIRTH")
-    issue = extract_date(text, "DATE OF ISSUE")
-    expiry = extract_date(text, "DATE OF EXPIRY")
+    # =========================
+    # OUTPUT 1 : STRUCTURED TABLE
+    # =========================
+    st.subheader("Extracted Form Fields")
 
-    cnic = extract_cnic(text)
+    if data:
+        st.table({
+            "Field": list(data.keys()),
+            "Value": list(data.values())
+        })
 
-    # ==============================
-    # NOMINEE DATA
-    # ==============================
-    nominee_name = find_value(text, "NAME OF NOMINEE")
-    nominee_relation = find_value(text, "NOMINEE RELATION")
-    nominee_cnic = extract_cnic(text.split("NOMINEE")[-1])
+    # =========================
+    # OUTPUT 2 : FULL TEXT (NO LOSS)
+    # =========================
+    st.subheader("Full Extracted Text (Nothing Missing)")
 
-    nominee_mobile = find_value(text, "MOBILE / WHATSAPP")
-
-    # ==============================
-    # OUTPUT
-    # ==============================
-    st.subheader("Applicant Details")
-
-    st.table({
-        "Field": [
-            "Applicant Name",
-            "Father / Husband",
-            "CNIC",
-            "Date of Birth",
-            "Passport No",
-            "Date of Issue",
-            "Date of Expiry",
-            "Occupation",
-            "Country Stay"
-        ],
-        "Value": [
-            name,
-            father,
-            cnic,
-            dob,
-            passport,
-            issue,
-            expiry,
-            occupation,
-            country_stay
-        ]
-    })
-
-    st.subheader("Nominee Details")
-
-    st.table({
-        "Field": [
-            "Nominee Name",
-            "Relation",
-            "CNIC",
-            "Mobile"
-        ],
-        "Value": [
-            nominee_name,
-            nominee_relation,
-            nominee_cnic,
-            nominee_mobile
-        ]
-    })
+    st.code("\n".join(lines))
 
     os.remove(path)
