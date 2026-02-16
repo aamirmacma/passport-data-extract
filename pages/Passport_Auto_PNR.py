@@ -4,41 +4,61 @@ import datetime
 import uuid
 import os
 
+
 # ================= DATE FUNCTIONS =================
 
 def mrz_date_fix(d):
-    if not d or len(d) != 6:
+
+    # agar MRZ date missing ho
+    if not d or len(str(d)) < 6:
         return None
 
-    y = int(d[:2])
-    m = int(d[2:4])
-    da = int(d[4:6])
+    try:
+        d = str(d)
 
-    if y > datetime.datetime.now().year % 100:
-        y += 1900
-    else:
-        y += 2000
+        y = int(d[:2])
+        m = int(d[2:4])
+        da = int(d[4:6])
 
-    return datetime.datetime(y, m, da)
+        if y > datetime.datetime.now().year % 100:
+            y += 1900
+        else:
+            y += 2000
+
+        return datetime.datetime(y, m, da)
+
+    except:
+        return None
+
 
 def safe_date(d):
+
     dt = mrz_date_fix(d)
+
     if not dt:
         return ""
+
     return dt.strftime("%d%b%y").upper()
 
+
 def calculate_age(d):
+
     birth = mrz_date_fix(d)
-    if not birth:
+
+    if birth is None:
         return 0, ""
 
     today = datetime.datetime.today()
+
     age = today.year - birth.year - (
         (today.month, today.day) < (birth.month, birth.day)
     )
+
     return age, birth.strftime("%d%b%y").upper()
 
+
 def passenger_title(age, gender):
+
     if age >= 12:
         return "MR" if gender == "M" else "MRS"
     elif age >= 2:
@@ -46,7 +66,8 @@ def passenger_title(age, gender):
     else:
         return "INF"
 
-# ================= MAIN RUN =================
+
+# ================= MAIN FUNCTION =================
 
 def run():
 
@@ -66,6 +87,7 @@ def run():
         for f in files:
 
             temp = f"temp_{uuid.uuid4().hex}.jpg"
+
             with open(temp, "wb") as fp:
                 fp.write(f.getbuffer())
 
@@ -74,40 +96,42 @@ def run():
             except:
                 mrz = None
 
-            if mrz:
+            # ===== MRZ FAIL SAFE =====
+            if not mrz:
+                st.warning("MRZ not detected — clear passport image upload karein")
+                os.remove(temp)
+                continue
 
-                d = mrz.to_dict()
-                passport = d.get("number", "")
+            d = mrz.to_dict()
 
-                if passport in seen:
-                    st.warning(f"Duplicate skipped: {passport}")
-                    os.remove(temp)
-                    continue
+            passport = d.get("number", "")
 
-                seen.add(passport)
+            if passport in seen:
+                st.warning(f"Duplicate skipped: {passport}")
+                os.remove(temp)
+                continue
 
-                surname = d.get("surname", "").replace("<", "")
-                names = d.get("names", "").replace("<", " ")
+            seen.add(passport)
 
-                age, dob = calculate_age(d.get("date_of_birth"))
-                exp = safe_date(d.get("expiration_date"))
+            surname = d.get("surname", "").replace("<", "")
+            names = d.get("names", "").replace("<", " ")
 
-                gender = d.get("sex", "M")
-                country = d.get("country", "")
+            age, dob = calculate_age(d.get("date_of_birth"))
+            exp = safe_date(d.get("expiration_date"))
 
-                passengers.append({
-                    "surname": surname,
-                    "names": names,
-                    "passport": passport,
-                    "dob": dob,
-                    "exp": exp,
-                    "gender": gender,
-                    "country": country,
-                    "age": age
-                })
+            gender = d.get("sex", "M")
+            country = d.get("country", "")
 
-            else:
-                st.warning("MRZ not detected")
+            passengers.append({
+                "surname": surname,
+                "names": names,
+                "passport": passport,
+                "dob": dob,
+                "exp": exp,
+                "gender": gender,
+                "country": country,
+                "age": age
+            })
 
             os.remove(temp)
 
