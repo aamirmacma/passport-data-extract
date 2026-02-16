@@ -1,9 +1,9 @@
 import streamlit as st
 
-# ===== IMPORT TAB FILES =====
-import passport_auto_pnr
-import passport_photo_maker
-import passport_size_maker
+# ===== IMPORT FROM PAGES FOLDER =====
+from pages import passport_auto_pnr
+from pages import passport_photo_maker
+from pages import passport_size_maker
 
 
 # ================= PAGE CONFIG =================
@@ -20,7 +20,6 @@ st.markdown("""
     background-color: #f4f7fb;
 }
 
-/* Header */
 .header-bar {
     background: linear-gradient(90deg,#0b5394,#1c7ed6);
     padding:14px 20px;
@@ -47,11 +46,6 @@ st.markdown("""
     font-weight:600;
 }
 
-/* Tabs spacing */
-.block-container {
-    padding-top: 1rem;
-}
-
 </style>
 
 <div class="header-bar">
@@ -68,17 +62,14 @@ tab1, tab2, tab3 = st.tabs([
     "📏 Passport Size Maker"
 ])
 
-
-# ================= TAB 1 =================
+# ===== TAB 1 =====
 with tab1:
     passport_auto_pnr.app()
 
-
-# ================= TAB 2 =================
+# ===== TAB 2 =====
 with tab2:
     passport_photo_maker.app()
 
-
-# ================= TAB 3 =================
+# ===== TAB 3 =====
 with tab3:
     passport_size_maker.app()
