@@ -5,22 +5,27 @@ import uuid
 import os
 
 
-# ================= DATE FUNCTIONS =================
+# ================= SAFE DATE FUNCTIONS =================
 
 def mrz_date_fix(d):
 
-    # agar MRZ date missing ho
-    if not d or len(str(d)) < 6:
+    # MRZ date missing ho to
+    if d is None:
+        return None
+
+    d = str(d)
+
+    if len(d) < 6:
         return None
 
     try:
-        d = str(d)
-
-        y = int(d[:2])
+        y = int(d[0:2])
         m = int(d[2:4])
         da = int(d[4:6])
 
-        if y > datetime.datetime.now().year % 100:
+        current_year = datetime.datetime.now().year % 100
+
+        if y > current_year:
             y += 1900
         else:
             y += 2000
@@ -35,7 +40,7 @@ def safe_date(d):
 
     dt = mrz_date_fix(d)
 
-    if not dt:
+    if dt is None:
         return ""
 
     return dt.strftime("%d%b%y").upper()
@@ -67,7 +72,7 @@ def passenger_title(age, gender):
         return "INF"
 
 
-# ================= MAIN FUNCTION =================
+# ================= MAIN =================
 
 def run():
 
@@ -82,90 +87,97 @@ def run():
     passengers = []
     seen = set()
 
-    if files:
+    if not files:
+        return
 
-        for f in files:
+    for f in files:
 
-            temp = f"temp_{uuid.uuid4().hex}.jpg"
+        # ===== TEMP SAVE SAFE =====
+        temp_file = f"temp_{uuid.uuid4().hex}.jpg"
 
-            with open(temp, "wb") as fp:
-                fp.write(f.getbuffer())
+        try:
+            with open(temp_file, "wb") as fp:
+                fp.write(f.read())
+        except:
+            st.error("File read error")
+            continue
 
-            try:
-                mrz = read_mrz(temp)
-            except:
-                mrz = None
+        # ===== MRZ READ =====
+        try:
+            mrz = read_mrz(temp_file)
+        except:
+            mrz = None
 
-            # ===== MRZ FAIL SAFE =====
-            if not mrz:
-                st.warning("MRZ not detected — clear passport image upload karein")
-                os.remove(temp)
-                continue
+        if mrz is None:
+            st.warning("MRZ not detected")
+            os.remove(temp_file)
+            continue
 
-            d = mrz.to_dict()
+        data = mrz.to_dict()
 
-            passport = d.get("number", "")
+        passport = data.get("number", "")
 
-            if passport in seen:
-                st.warning(f"Duplicate skipped: {passport}")
-                os.remove(temp)
-                continue
+        if passport in seen:
+            st.warning(f"Duplicate skipped: {passport}")
+            os.remove(temp_file)
+            continue
 
-            seen.add(passport)
+        seen.add(passport)
 
-            surname = d.get("surname", "").replace("<", "")
-            names = d.get("names", "").replace("<", " ")
+        surname = data.get("surname", "").replace("<", "")
+        names = data.get("names", "").replace("<", " ")
 
-            age, dob = calculate_age(d.get("date_of_birth"))
-            exp = safe_date(d.get("expiration_date"))
+        age, dob = calculate_age(data.get("date_of_birth"))
+        exp = safe_date(data.get("expiration_date"))
 
-            gender = d.get("sex", "M")
-            country = d.get("country", "")
+        gender = data.get("sex", "M")
+        country = data.get("country", "")
 
-            passengers.append({
-                "surname": surname,
-                "names": names,
-                "passport": passport,
-                "dob": dob,
-                "exp": exp,
-                "gender": gender,
-                "country": country,
-                "age": age
-            })
+        passengers.append({
+            "surname": surname,
+            "names": names,
+            "passport": passport,
+            "dob": dob,
+            "exp": exp,
+            "gender": gender,
+            "country": country,
+            "age": age
+        })
 
-            os.remove(temp)
+        os.remove(temp_file)
 
     # ================= OUTPUT =================
 
-    if passengers:
+    if not passengers:
+        return
 
-        st.subheader("Extracted Passport Details")
+    st.subheader("Extracted Passport Details")
 
-        nm1_lines = []
-        docs_lines = []
+    nm1_lines = []
+    docs_lines = []
 
-        for i, p in enumerate(passengers, 1):
+    for i, p in enumerate(passengers, 1):
 
-            title = passenger_title(p["age"], p["gender"])
+        title = passenger_title(p["age"], p["gender"])
 
-            st.write(f"Passenger {i}: {p['surname']} {p['names']}")
-            st.write("Passport:", p["passport"])
-            st.write("DOB:", p["dob"])
-            st.write("Expiry:", p["exp"])
-            st.divider()
+        st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+        st.write("Passport:", p["passport"])
+        st.write("DOB:", p["dob"])
+        st.write("Expiry:", p["exp"])
+        st.divider()
 
-            nm1_lines.append(
-                f"NM1{p['surname']}/{p['names']} {title}"
-            )
+        nm1_lines.append(
+            f"NM1{p['surname']}/{p['names']} {title}"
+        )
 
-            docs_lines.append(
-                f"SRDOCS HK1-P-{p['country']}-{p['passport']}-"
-                f"{p['country']}-{p['dob']}-{p['gender']}-"
-                f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}"
-            )
+        docs_lines.append(
+            f"SRDOCS HK1-P-{p['country']}-{p['passport']}-"
+            f"{p['country']}-{p['dob']}-{p['gender']}-"
+            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}"
+        )
 
-        st.subheader("NM1 Entries")
-        st.code("\n".join(nm1_lines))
+    st.subheader("NM1 Entries")
+    st.code("\n".join(nm1_lines))
 
-        st.subheader("SRDOCS Entries")
-        st.code("\n".join(docs_lines))
+    st.subheader("SRDOCS Entries")
+    st.code("\n".join(docs_lines))
