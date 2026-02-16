@@ -1,27 +1,10 @@
 import streamlit as st
 
+# ===== IMPORT TAB FILES =====
 import passport_auto_pnr
 import passport_photo_maker
 import passport_size_maker
 
-st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
-
-st.title("✈️ Amadeus Auto PNR Builder")
-
-tab1, tab2, tab3 = st.tabs([
-    "Passport Auto PNR",
-    "Passport Photo Maker",
-    "Passport Size Maker"
-])
-
-with tab1:
-    passport_auto_pnr.app()
-
-with tab2:
-    passport_photo_maker.app()
-
-with tab3:
-    passport_size_maker.app()
 
 # ================= PAGE CONFIG =================
 st.set_page_config(
@@ -29,11 +12,15 @@ st.set_page_config(
     layout="wide"
 )
 
-# ================= HEADER =================
+# ================= HEADER STYLE =================
 st.markdown("""
 <style>
-.stApp { background-color:#f4f7fb; }
 
+.stApp {
+    background-color: #f4f7fb;
+}
+
+/* Header */
 .header-bar {
     background: linear-gradient(90deg,#0b5394,#1c7ed6);
     padding:14px 20px;
@@ -42,6 +29,7 @@ st.markdown("""
     display:flex;
     justify-content:space-between;
     align-items:center;
+    box-shadow:0 3px 8px rgba(0,0,0,0.15);
 }
 
 .header-title {
@@ -58,6 +46,12 @@ st.markdown("""
     font-size:14px;
     font-weight:600;
 }
+
+/* Tabs spacing */
+.block-container {
+    padding-top: 1rem;
+}
+
 </style>
 
 <div class="header-bar">
@@ -66,6 +60,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
 # ================= TABS =================
 tab1, tab2, tab3 = st.tabs([
     "🛂 Passport Auto PNR",
@@ -73,12 +68,17 @@ tab1, tab2, tab3 = st.tabs([
     "📏 Passport Size Maker"
 ])
 
+
+# ================= TAB 1 =================
 with tab1:
-    Passport_Auto_PNR.app()
+    passport_auto_pnr.app()
 
+
+# ================= TAB 2 =================
 with tab2:
-    Passport_Photo_Maker.app()
+    passport_photo_maker.app()
 
+
+# ================= TAB 3 =================
 with tab3:
-    Passport_Size_Maker.app()
-
+    passport_size_maker.app()
