@@ -6,12 +6,9 @@ import os
 import cv2
 import uuid
 import re
-from PIL import Image, ImageEnhance
 import numpy as np
-import io
-
-# ================= CONFIG =================
-st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
+from PIL import Image, ImageEnhance
+import streamlit.components.v1 as components
 
 # ================= TESSERACT =================
 if os.name == "nt":
@@ -19,41 +16,39 @@ if os.name == "nt":
 else:
     pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
-# ================= HEADER =================
+# ================= PAGE =================
+st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
+
+# ================= STYLE =================
 st.markdown("""
 <style>
-.stApp {background:#f4f7fb;}
+.stApp { background:#f4f7fb; }
 
-.header-bar{
- background:linear-gradient(90deg,#0b5394,#1c7ed6);
- padding:14px 20px;
- border-radius:12px;
- margin-bottom:20px;
- display:flex;
- justify-content:space-between;
- align-items:center;
+.header-bar {
+    background: linear-gradient(90deg,#0b5394,#1c7ed6);
+    padding:14px 20px;
+    border-radius:12px;
+    margin-bottom:20px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+.header-title { font-size:26px; font-weight:700; color:white; }
+.header-dev {
+    background:white;
+    color:#0b5394;
+    padding:6px 14px;
+    border-radius:20px;
+    font-size:14px;
+    font-weight:600;
 }
 
-.header-title{
- font-size:26px;
- font-weight:700;
- color:white;
-}
-
-.header-dev{
- background:white;
- color:#0b5394;
- padding:6px 14px;
- border-radius:20px;
- font-size:14px;
- font-weight:600;
-}
-
-.box{
- background:white;
- padding:15px;
- border-radius:12px;
- margin-bottom:12px;
+.passport-box {
+    background:white;
+    padding:15px;
+    border-radius:12px;
+    border-left:5px solid #1c7ed6;
+    margin-bottom:10px;
 }
 </style>
 
@@ -63,24 +58,26 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["✈️ Passport PNR Builder", "📷 Passport Photo Maker"])
-
-# =========================================================
-# ================= PASSPORT SYSTEM =======================
-# =========================================================
+# ================= DATE SAFE FUNCTIONS =================
 
 def mrz_date_fix(d):
-    if not d or len(d)<6:
+    if not d or len(str(d)) < 6:
         return datetime.datetime(2000,1,1)
-    y=int(d[:2])
-    m=int(d[2:4])
-    da=int(d[4:6])
 
-    if y > datetime.datetime.now().year % 100:
-        y+=1900
-    else:
-        y+=2000
-    return datetime.datetime(y,m,da)
+    try:
+        d=str(d)
+        y=int(d[:2])
+        m=int(d[2:4])
+        da=int(d[4:6])
+
+        if y > datetime.datetime.now().year % 100:
+            y += 1900
+        else:
+            y += 2000
+
+        return datetime.datetime(y,m,da)
+    except:
+        return datetime.datetime(2000,1,1)
 
 def safe_date(d):
     return mrz_date_fix(d).strftime("%d%b%y").upper()
@@ -88,152 +85,200 @@ def safe_date(d):
 def calculate_age(d):
     birth=mrz_date_fix(d)
     today=datetime.datetime.today()
-    age=today.year-birth.year
+    age=today.year-birth.year-((today.month,today.day)<(birth.month,birth.day))
     return age,birth.strftime("%d%b%y").upper()
 
+# ================= TITLE =================
 def passenger_title(age,gender,dob):
-    if age>=12:
+    if age >= 12:
         return "MR" if gender=="M" else "MRS"
-    elif age>=2:
-        return f"CHD({dob})"
+    elif age >= 2:
+        return "CHD"
     else:
         return "INF"
 
-def clean_names(surname,names):
+# ================= NAME CLEAN =================
+def parse_mrz_names(surname,names):
+
     surname=surname.replace("<","").strip().upper()
-    names=names.replace("<"," ").split()
+    names=names.replace("<"," ")
 
     clean=[]
-    for w in names:
+    for w in names.split():
+
+        w=w.strip().upper()
+
+        # remove garbage words like KKKKK
         if len(w)<=1: continue
         if len(set(w))==1: continue
         if w.count("K")>len(w)*0.5: continue
+
         clean.append(w)
 
     return surname," ".join(clean)
 
-with tab1:
+# ================= OCR EXTRA =================
+def extract_extra_fields(path):
 
-    files=st.file_uploader(
-        "Upload Passport Images",
-        type=["jpg","jpeg","png"],
-        accept_multiple_files=True
-    )
+    img=cv2.imread(path)
+    if img is None:
+        return "","","",""
 
-    passengers=[]
-    seen=set()
+    gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    text=pytesseract.image_to_string(gray)
 
-    if files:
+    father=""; pob=""; doi=""; cnic=""
 
-        for f in files:
+    for line in text.upper().split("\n"):
 
-            temp=f"temp_{uuid.uuid4().hex}.jpg"
-            with open(temp,"wb") as fp:
-                fp.write(f.getbuffer())
+        if "FATHER" in line or "HUSBAND" in line:
+            father=line
 
-            try:
-                mrz=read_mrz(temp)
-            except:
-                mrz=None
+        if "KARACHI" in line or "PLACE OF BIRTH" in line:
+            pob=line
 
-            if mrz:
+        if "ISSUE" in line:
+            doi=line
 
-                d=mrz.to_dict()
-                passport=d.get("number","")
+        m=re.search(r"\d{5}-\d{7}-\d",line)
+        if m:
+            cnic=m.group()
 
-                if passport in seen:
-                    continue
-                seen.add(passport)
+    return father,pob,doi,cnic
 
-                surname,names=clean_names(
-                    d.get("surname",""),
-                    d.get("names","")
-                )
+# ================= PHOTO ENHANCER =================
+def enhance_photo(image):
 
-                age,dob=calculate_age(d.get("date_of_birth"))
-                exp=safe_date(d.get("expiration_date"))
+    img=Image.open(image).convert("RGB")
 
-                passengers.append({
-                    "surname":surname,
-                    "names":names,
-                    "passport":passport,
-                    "dob":dob,
-                    "exp":exp,
-                    "gender":d.get("sex","M"),
-                    "country":d.get("country",""),
-                    "age":age
-                })
+    enhancer=ImageEnhance.Sharpness(img)
+    img=enhancer.enhance(1.5)
 
-            os.remove(temp)
+    enhancer=ImageEnhance.Contrast(img)
+    img=enhancer.enhance(1.2)
 
-    if passengers:
+    enhancer=ImageEnhance.Brightness(img)
+    img=enhancer.enhance(1.05)
 
-        st.subheader("Extracted Passport Details")
-
-        nm1=[]
-        docs=[]
-        pax=1
-
-        for p in passengers:
-
-            title=passenger_title(p["age"],p["gender"],p["dob"])
-
-            st.markdown('<div class="box">',unsafe_allow_html=True)
-            st.write(f"{p['surname']} {p['names']}")
-            st.write("Passport:",p["passport"])
-            st.write("DOB:",p["dob"])
-            st.write("Expiry:",p["exp"])
-            st.markdown('</div>',unsafe_allow_html=True)
-
-            nm1.append(f"NM1{p['surname']}/{p['names']} {title}")
-
-            docs.append(
-                f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
-                f"{p['country']}-{p['dob']}-{p['gender']}-"
-                f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}"
-            )
-            pax+=1
-
-        st.subheader("NM1 Entries")
-        st.code("\n".join(nm1))
-
-        st.subheader("SRDOCS Entries")
-        st.code("\n".join(docs))
-
-
-# =========================================================
-# ================= PHOTO SYSTEM ==========================
-# =========================================================
-
-def enhance_photo(img):
-    img=ImageEnhance.Brightness(img).enhance(1.1)
-    img=ImageEnhance.Contrast(img).enhance(1.2)
-    img=ImageEnhance.Sharpness(img).enhance(1.2)
+    img=img.resize((120,150))
     return img
 
-with tab2:
+# ================= UPLOAD =================
+files=st.file_uploader(
+    "Upload Passport Images",
+    type=["jpg","jpeg","png"],
+    accept_multiple_files=True
+)
 
-    photo=st.file_uploader(
-        "Upload Passport Photo",
-        type=["jpg","jpeg","png"]
-    )
+passengers=[]
+seen=set()
 
-    if photo:
+if files:
 
-        img=Image.open(photo).convert("RGB")
+    for f in files:
 
-        img=enhance_photo(img)
+        temp=f"temp_{uuid.uuid4().hex}.jpg"
 
-        img=img.resize((140,170))
+        with open(temp,"wb") as fp:
+            fp.write(f.getbuffer())
 
-        st.image(img,caption="Passport Photo Preview")
+        try:
+            mrz=read_mrz(temp)
+        except:
+            mrz=None
 
-        buf=io.BytesIO()
-        img.save(buf,format="JPEG",quality=90)
+        if not mrz:
+            st.warning("MRZ not detected")
+            continue
 
-        st.download_button(
-            "⬇ Download Passport Photo",
-            buf.getvalue(),
-            file_name="passport_photo.jpg",
-            mime="image/jpeg"
+        d=mrz.to_dict()
+
+        passport=d.get("number","")
+
+        if passport in seen:
+            continue
+
+        seen.add(passport)
+
+        surname,names=parse_mrz_names(
+            d.get("surname",""),
+            d.get("names","")
         )
+
+        gender=d.get("sex","M")
+        country=d.get("country","")
+
+        age,dob=calculate_age(d.get("date_of_birth"))
+        exp=safe_date(d.get("expiration_date"))
+
+        father,pob,doi,cnic=extract_extra_fields(temp)
+
+        passengers.append({
+            "surname":surname,
+            "names":names,
+            "passport":passport,
+            "dob":dob,
+            "exp":exp,
+            "gender":gender,
+            "country":country,
+            "age":age,
+            "father":father,
+            "pob":pob,
+            "doi":doi,
+            "cnic":cnic
+        })
+
+        os.remove(temp)
+
+# ================= OUTPUT =================
+nm1_lines=[]
+docs_lines=[]
+
+if passengers:
+
+    st.subheader("Extracted Passport Details")
+
+    for i,p in enumerate(passengers,1):
+
+        st.markdown('<div class="passport-box">',unsafe_allow_html=True)
+
+        st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+        st.write("Surname:",p["surname"])
+        st.write("Given Name:",p["names"])
+        st.write("Passport:",p["passport"])
+        st.write("DOB:",p["dob"])
+        st.write("Expiry:",p["exp"])
+        st.write("Father/Husband:",p["father"])
+        st.write("Place of Birth:",p["pob"])
+        st.write("Date of Issue:",p["doi"])
+        st.write("CNIC:",p["cnic"])
+
+        st.markdown('</div>',unsafe_allow_html=True)
+
+    pax=1
+    for p in passengers:
+
+        title=passenger_title(p["age"],p["gender"],p["dob"])
+
+        nm1_lines.append(f"NM1{p['surname']}/{p['names']} {title}")
+
+        docs_lines.append(
+            f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+            f"{p['country']}-{p['dob']}-{p['gender']}-"
+            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}"
+        )
+        pax+=1
+
+    export_text="\n".join(nm1_lines)+"\n\n"+"\n".join(docs_lines)
+
+    st.subheader("NM1 Entries")
+    st.code("\n".join(nm1_lines))
+
+    st.subheader("SRDOCS Entries")
+    st.code("\n".join(docs_lines))
+
+    st.download_button(
+        "⬇ Download Amadeus PNR",
+        data=export_text,
+        file_name="amadeus_pnr.txt"
+    )
