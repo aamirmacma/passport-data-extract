@@ -7,7 +7,7 @@ import cv2
 import uuid
 import re
 import numpy as np
-from PIL import Image, ImageEnhance
+from PIL import Image
 import io
 
 # ================= PAGE =================
@@ -23,29 +23,26 @@ else:
 st.markdown("""
 <style>
 .stApp {background:#f4f7fb;}
-
-.header-bar {
-    background: linear-gradient(90deg,#0b5394,#1c7ed6);
-    padding:14px 20px;
-    border-radius:12px;
-    margin-bottom:20px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
+.header-bar{
+ background:linear-gradient(90deg,#0b5394,#1c7ed6);
+ padding:14px 20px;
+ border-radius:12px;
+ margin-bottom:20px;
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
 }
-.header-title {font-size:26px;font-weight:700;color:white;}
-.header-dev {
-    background:white;color:#0b5394;
-    padding:6px 14px;border-radius:20px;
-    font-size:14px;font-weight:600;
+.header-title{font-size:26px;font-weight:700;color:white;}
+.header-dev{
+ background:white;color:#0b5394;
+ padding:6px 14px;border-radius:20px;
+ font-size:14px;font-weight:600;
 }
-
-.box {
-    background:white;
-    padding:15px;
-    border-radius:12px;
-    border-left:5px solid #1c7ed6;
-    margin-bottom:10px;
+.box{
+ background:white;padding:15px;
+ border-radius:12px;
+ border-left:5px solid #1c7ed6;
+ margin-bottom:10px;
 }
 </style>
 
@@ -97,7 +94,6 @@ def passenger_title(age,gender):
 def parse_mrz_names(surname,names):
     surname=surname.replace("<","").strip().upper()
     names=names.replace("<"," ")
-
     clean=[]
     for w in names.split():
         w=w.strip().upper()
@@ -105,8 +101,32 @@ def parse_mrz_names(surname,names):
         if len(set(w))==1: continue
         if w.count("K")>len(w)*0.5: continue
         clean.append(w)
-
     return surname," ".join(clean)
+
+# ================= FAST MRZ =================
+def read_mrz_fast(path):
+
+    img=cv2.imread(path)
+    if img is None:
+        return None
+
+    h,w=img.shape[:2]
+
+    # bottom MRZ area crop
+    mrz_crop=img[int(h*0.65):h,0:w]
+
+    temp=path+"_mrz.jpg"
+    cv2.imwrite(temp,mrz_crop)
+
+    try:
+        mrz=read_mrz(temp)
+    except:
+        mrz=None
+
+    if os.path.exists(temp):
+        os.remove(temp)
+
+    return mrz
 
 # ================= OCR EXTRA =================
 def extract_extra_fields(path):
@@ -125,7 +145,7 @@ def extract_extra_fields(path):
         if "FATHER" in line or "HUSBAND" in line:
             father=line
 
-        if "KARACHI" in line or "PLACE OF BIRTH" in line:
+        if "PLACE OF BIRTH" in line:
             pob=line
 
         if "ISSUE" in line:
@@ -137,21 +157,20 @@ def extract_extra_fields(path):
 
     return father,pob,doi,cnic
 
-# ================= PHOTO ENHANCER =================
-def enhance_photo(uploaded_file):
+# ================= FAST PHOTO =================
+def enhance_photo_fast(uploaded_file):
 
-    img=Image.open(uploaded_file).convert("RGB")
+    file_bytes=np.asarray(bytearray(uploaded_file.read()),dtype=np.uint8)
+    img=cv2.imdecode(file_bytes,1)
 
-    img=ImageEnhance.Sharpness(img).enhance(1.4)
-    img=ImageEnhance.Contrast(img).enhance(1.2)
-    img=ImageEnhance.Brightness(img).enhance(1.05)
+    img=cv2.resize(img,(140,180))
 
-    img=img.resize((140,180))
+    # fast enhance
+    img=cv2.convertScaleAbs(img,alpha=1.15,beta=10)
 
-    buf=io.BytesIO()
-    img.save(buf,format="JPEG",quality=85)
+    _,buffer=cv2.imencode(".jpg",img,[int(cv2.IMWRITE_JPEG_QUALITY),85])
 
-    return img,buf
+    return img,buffer.tobytes()
 
 # ================= TABS =================
 tab1, tab2 = st.tabs(["📘 Passport Auto PNR", "📷 Passport Photo Maker"])
@@ -178,10 +197,7 @@ with tab1:
             with open(temp,"wb") as fp:
                 fp.write(f.getbuffer())
 
-            try:
-                mrz=read_mrz(temp)
-            except:
-                mrz=None
+            mrz=read_mrz_fast(temp)
 
             if not mrz:
                 st.warning("MRZ not detected")
@@ -192,7 +208,6 @@ with tab1:
 
             if passport in seen:
                 continue
-
             seen.add(passport)
 
             surname,names=parse_mrz_names(
@@ -236,15 +251,9 @@ with tab1:
 
             st.markdown('<div class="box">',unsafe_allow_html=True)
             st.write(f"Passenger {i}: {p['surname']} {p['names']}")
-            st.write("Surname:",p["surname"])
-            st.write("Given Name:",p["names"])
             st.write("Passport:",p["passport"])
             st.write("DOB:",p["dob"])
             st.write("Expiry:",p["exp"])
-            st.write("Father/Husband:",p["father"])
-            st.write("Place of Birth:",p["pob"])
-            st.write("Date of Issue:",p["doi"])
-            st.write("CNIC:",p["cnic"])
             st.markdown('</div>',unsafe_allow_html=True)
 
         pax=1
@@ -288,13 +297,14 @@ with tab2:
     )
 
     if photo:
-        img,buf=enhance_photo(photo)
 
-        st.image(img,caption="Enhanced Passport Photo")
+        img,buf=enhance_photo_fast(photo)
+
+        st.image(img[:,:,::-1],caption="Enhanced Passport Photo")
 
         st.download_button(
             "⬇ Download Passport Photo",
-            data=buf.getvalue(),
+            data=buf,
             file_name="passport_photo.jpg",
             mime="image/jpeg"
         )
