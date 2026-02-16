@@ -1,31 +1,38 @@
 import streamlit as st
 import cv2
 import numpy as np
+from PIL import Image
+import io
 
-st.set_page_config(page_title="Passport Photo Maker", layout="wide")
+def enhance(img):
+    img = cv2.detailEnhance(img, sigma_s=10, sigma_r=0.15)
+    img = cv2.convertScaleAbs(img, alpha=1.1, beta=10)
+    return img
 
-st.title("📷 Passport Photo Maker")
+def run():
 
-file = st.file_uploader("Upload Photo", type=["jpg","jpeg","png"])
+    st.subheader("📷 Passport Photo Maker")
 
-if file:
+    file = st.file_uploader("Upload Photo", type=["jpg","jpeg","png"])
 
-    file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
-    img = cv2.imdecode(file_bytes, 1)
+    if file:
 
-    # Enhance
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    l,a,b = cv2.split(lab)
-    l = cv2.equalizeHist(l)
-    enhanced = cv2.merge((l,a,b))
-    enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
+        image = Image.open(file).convert("RGB")
+        img = np.array(image)
 
-    st.image(enhanced, channels="BGR")
+        img = enhance(img)
 
-    _, buffer = cv2.imencode(".jpg", enhanced)
-    st.download_button(
-        "Download Photo",
-        buffer.tobytes(),
-        "passport_photo.jpg",
-        "image/jpeg"
-    )
+        white_bg = np.ones_like(img) * 255
+        result = cv2.addWeighted(img, 0.9, white_bg, 0.1, 0)
+
+        st.image(result, width=250)
+
+        buffer = io.BytesIO()
+        Image.fromarray(result).save(buffer, format="JPEG", quality=95)
+
+        st.download_button(
+            "Download Photo",
+            data=buffer.getvalue(),
+            file_name="passport_photo.jpg",
+            mime="image/jpeg"
+        )
