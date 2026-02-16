@@ -9,11 +9,58 @@ import re
 import streamlit.components.v1 as components
 
 
-# ================= TESSERACT =================
+# ================= TESSERACT AUTO =================
 if os.name == "nt":
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 else:
     pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+
+
+# ================= HEADER =================
+st.markdown("""
+<style>
+.stApp { background-color:#f4f7fb; }
+
+.header-bar {
+    background: linear-gradient(90deg,#0b5394,#1c7ed6);
+    padding:14px 20px;
+    border-radius:12px;
+    margin-bottom:20px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    box-shadow:0 3px 8px rgba(0,0,0,0.15);
+}
+
+.header-title {
+    font-size:26px;
+    font-weight:700;
+    color:white;
+}
+
+.header-dev {
+    background:white;
+    color:#0b5394;
+    padding:6px 14px;
+    border-radius:20px;
+    font-size:14px;
+    font-weight:600;
+}
+
+.passport-box {
+    background:white;
+    padding:15px;
+    border-radius:12px;
+    border-left:5px solid #1c7ed6;
+    margin-bottom:10px;
+}
+</style>
+
+<div class="header-bar">
+    <div class="header-title">✈️ Passport Auto PNR Builder</div>
+    <div class="header-dev">Developed by Aamir Khan</div>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ================= FUNCTIONS =================
@@ -23,17 +70,18 @@ def mrz_date_fix(d):
     if not d:
         return None
 
-    d = str(d)
-
-    if len(d) < 6:
-        return None
-
     try:
+        d = str(d)
+        if len(d) < 6:
+            return None
+
         y = int(d[:2])
         m = int(d[2:4])
         da = int(d[4:6])
 
-        if y > datetime.datetime.now().year % 100:
+        current_year = datetime.datetime.now().year % 100
+
+        if y > current_year:
             y += 1900
         else:
             y += 2000
@@ -46,7 +94,7 @@ def mrz_date_fix(d):
 
 def safe_date(d):
     dt = mrz_date_fix(d)
-    if not dt:
+    if dt is None:
         return ""
     return dt.strftime("%d%b%y").upper()
 
@@ -55,7 +103,7 @@ def calculate_age(d):
 
     birth = mrz_date_fix(d)
 
-    if not birth:
+    if birth is None:
         return 0, ""
 
     today = datetime.datetime.today()
@@ -68,7 +116,6 @@ def calculate_age(d):
 
 
 def passenger_title(age, gender):
-
     if age >= 12:
         return "MR" if gender == "M" else "MRS"
     elif age >= 2:
@@ -84,17 +131,13 @@ def parse_mrz_names(surname, names):
     names = " ".join(names.split())
 
     clean = []
-
     for w in names.split():
-
-        # remove garbage names
         if len(w) <= 1:
             continue
         if len(set(w)) == 1:
             continue
         if w.count("K") > len(w) * 0.6:
             continue
-
         clean.append(w)
 
     return surname, " ".join(clean)
@@ -110,23 +153,18 @@ def auto_rotate(path):
     cv2.imwrite(path, img)
 
 
-# ================= MAIN RUN =================
+# ================= UPLOAD =================
 
-def run():
+files = st.file_uploader(
+    "Upload Passport Images",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True
+)
 
-    st.subheader("Passport Auto PNR")
+passengers = []
+seen = set()
 
-    files = st.file_uploader(
-        "Upload Passport Images",
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True
-    )
-
-    if not files:
-        return
-
-    passengers = []
-    seen = set()
+if files:
 
     for f in files:
 
@@ -167,7 +205,6 @@ def run():
 
         age, dob = calculate_age(d.get("date_of_birth"))
         exp = safe_date(d.get("expiration_date"))
-
         title = passenger_title(age, gender)
 
         passengers.append({
@@ -184,27 +221,28 @@ def run():
         os.remove(temp)
 
 
-    # ================= OUTPUT =================
+# ================= OUTPUT =================
 
-    if not passengers:
-        return
+if passengers:
+
+    st.subheader("Extracted Passport Details")
 
     nm1_lines = []
     docs_lines = []
 
-    st.subheader("Extracted Passport Details")
-
     for i, p in enumerate(passengers, 1):
 
+        st.markdown('<div class="passport-box">', unsafe_allow_html=True)
+
         st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+        st.write("Surname:", p["surname"])
+        st.write("Given Name:", p["names"])
+        st.write("Title:", p["title"])
         st.write("Passport:", p["passport"])
         st.write("DOB:", p["dob"])
         st.write("Expiry:", p["exp"])
-        st.write("---")
 
-    pax = 1
-
-    for p in passengers:
+        st.markdown('</div>', unsafe_allow_html=True)
 
         nm1_lines.append(
             f"NM1{p['surname']}/{p['names']} {p['title']}"
@@ -213,17 +251,29 @@ def run():
         docs_lines.append(
             f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
             f"{p['country']}-{p['dob']}-{p['gender']}-"
-            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}"
+            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{i}"
         )
-
-        pax += 1
 
     export_text = "\n".join(nm1_lines) + "\n\n" + "\n".join(docs_lines)
 
-    st.code(export_text)
+    st.subheader("NM1 Entries")
+    st.code("\n".join(nm1_lines))
+
+    st.subheader("SRDOCS Entries")
+    st.code("\n".join(docs_lines))
 
     st.download_button(
-        "Download Amadeus PNR",
-        export_text,
-        "amadeus_pnr.txt"
+        "⬇ Download Amadeus PNR (TXT)",
+        data=export_text,
+        file_name="amadeus_pnr.txt",
+        mime="text/plain"
     )
+
+    components.html(f"""
+    <button style="background:#1c7ed6;color:white;
+    padding:10px 18px;border:none;border-radius:6px;
+    font-size:16px;cursor:pointer;"
+    onclick="navigator.clipboard.writeText(`{export_text}`)">
+    📋 Copy PNR to Clipboard
+    </button>
+    """, height=60)
