@@ -7,8 +7,7 @@ import cv2
 import uuid
 import re
 
-
-# ================= TESSERACT PATH =================
+# ================= TESSERACT =================
 if os.name == "nt":
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 else:
@@ -16,16 +15,13 @@ else:
 
 
 # ==================================================
-# MAIN RUN FUNCTION
+# MAIN FUNCTION
 # ==================================================
 def run():
 
-    st.title("✈️ Passport Auto PNR Builder")
+    st.header("✈️ Passport Auto PNR Builder")
 
-    # ==================================================
-    # FUNCTIONS
-    # ==================================================
-
+    # ---------- DATE FIX ----------
     def mrz_date_fix(d):
         try:
             if not d or len(str(d)) < 6:
@@ -48,14 +44,11 @@ def run():
 
     def safe_date(d):
         dt = mrz_date_fix(d)
-        if dt is None:
-            return ""
-        return dt.strftime("%d%b%y").upper()
+        return "" if dt is None else dt.strftime("%d%b%y").upper()
 
 
     def calculate_age(d):
         birth = mrz_date_fix(d)
-
         if birth is None:
             return 30, ""
 
@@ -67,6 +60,7 @@ def run():
         return age, birth.strftime("%d%b%y").upper()
 
 
+    # ---------- TITLE ----------
     def passenger_title(age, gender):
         if age >= 12:
             return "MR" if gender == "M" else "MRS"
@@ -77,26 +71,48 @@ def run():
 
 
     # ---------- NAME CLEANER ----------
+    def clean_word(w):
+        # remove garbage words
+        if len(w) <= 1:
+            return False
+        if len(set(w)) == 1:
+            return False
+        if w.count("K") > len(w) * 0.6:
+            return False
+        return True
+
+
+    def split_joined_name(name):
+
+        # ABDURREHMANSYED -> ABDUR REHMAN SYED
+        patterns = [
+            "ABDUR", "ABDUL", "REHMAN", "RAHMAN",
+            "SYED", "AHMED", "MUHAMMAD", "MOHAMMAD",
+            "ALI", "HUSSAIN", "HASSAN", "KHAN"
+        ]
+
+        for p in patterns:
+            name = name.replace(p, " " + p)
+
+        return " ".join(name.split())
+
+
     def parse_mrz_names(surname, names):
 
         surname = surname.replace("<", "").strip().upper()
+
         names = names.replace("<", " ")
-        names = " ".join(names.split())
+        names = " ".join(names.split()).upper()
 
-        clean = []
+        words = []
         for w in names.split():
-            if len(w) <= 1:
-                continue
-            if len(set(w)) == 1:
-                continue
-            if w.count("K") > len(w) * 0.6:
-                continue
-            clean.append(w)
+            if clean_word(w):
+                words.append(split_joined_name(w))
 
-        return surname, " ".join(clean)
+        return surname, " ".join(words)
 
 
-    # ---------- OCR EXTRACTION ----------
+    # ---------- OCR EXTRA ----------
     def extract_extra_fields(path):
 
         img = cv2.imread(path)
@@ -113,27 +129,13 @@ def run():
 
         for i, line in enumerate(lines):
 
-            # Father / Husband detection
             if "FATHER" in line or "HUSBAND" in line:
+                if i + 1 < len(lines):
+                    father = lines[i+1].strip()
 
-                same_line = line.replace("FATHER NAME", "") \
-                                .replace("HUSBAND NAME", "") \
-                                .strip()
-
-                if len(same_line) > 3:
-                    father = same_line
-                elif i + 1 < len(lines):
-                    father = lines[i + 1].strip()
-
-            # CNIC format 1
             m = re.search(r"\d{5}-\d{7}-\d", line)
             if m:
                 cnic = m.group()
-
-            # CNIC format 2
-            m2 = re.search(r"\d{13}", line)
-            if m2 and cnic == "":
-                cnic = m2.group()
 
         return father, cnic
 
@@ -148,9 +150,7 @@ def run():
         cv2.imwrite(path, img)
 
 
-    # ==================================================
-    # UPLOAD
-    # ==================================================
+    # ================= UPLOAD =================
 
     files = st.file_uploader(
         "Upload Passport Images",
@@ -221,9 +221,7 @@ def run():
 
             os.remove(temp)
 
-    # ==================================================
-    # OUTPUT
-    # ==================================================
+    # ================= OUTPUT =================
 
     if passengers:
 
@@ -236,20 +234,18 @@ def run():
 
         for i, p in enumerate(passengers, 1):
 
-            st.markdown("---")
-
             st.markdown(f"""
-**Passenger {i}**
+            **Passenger {i}**
 
-Surname: {p['surname']}  
-Given Name: {p['names']}  
-Passport: {p['passport']}  
-DOB: {p['dob']}  
-Expiry: {p['exp']}  
-Gender: {p['gender']}  
-Father/Husband: {p['father']}  
-CNIC: {p['cnic']}
-""")
+            Surname: {p['surname']}  
+            Given Name: {p['names']}  
+            Passport: {p['passport']}  
+            DOB: {p['dob']}  
+            Expiry: {p['exp']}  
+            Gender: {p['gender']}  
+            Father/Husband: {p['father']}  
+            CNIC: {p['cnic']}
+            """)
 
             nm1_lines.append(
                 f"NM1{p['surname']}/{p['names']} {p['title']}"
@@ -258,7 +254,8 @@ CNIC: {p['cnic']}
             docs_lines.append(
                 f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
                 f"{p['country']}-{p['dob']}-{p['gender']}-"
-                f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}/P{pax}"
+                f"{p['exp']}-{p['surname']}-"
+                f"{p['names'].replace(' ','-')}-H/P{pax}"
             )
 
             pax += 1
