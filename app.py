@@ -301,3 +301,45 @@ if passengers:
     📋 Copy PNR to Clipboard
     </button>
     """, height=60)
+
+from PIL import Image, ImageEnhance, ImageDraw, ImageFont
+import io
+
+passport_no = st.text_input("Enter Passport Number for Photo")
+
+if files and passport_no:
+
+    for file in files:
+
+        img = Image.open(file).convert("RGB")
+
+        # ===== Enhance =====
+        img = ImageEnhance.Brightness(img).enhance(1.1)
+        img = ImageEnhance.Contrast(img).enhance(1.15)
+        img = ImageEnhance.Sharpness(img).enhance(1.2)
+
+        # ===== Resize Passport Size =====
+        img = img.resize((140,180))
+
+        # ===== Add Passport Number =====
+        draw = ImageDraw.Draw(img)
+
+        try:
+            font = ImageFont.truetype("arial.ttf", 14)
+        except:
+            font = ImageFont.load_default()
+
+        draw.text((10,160), passport_no, fill="black", font=font)
+
+        # ===== Convert to download =====
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+
+        st.image(img, caption="Processed Passport Photo")
+
+        st.download_button(
+            "⬇ Download Passport Photo",
+            data=buf.getvalue(),
+            file_name="passport_photo.jpg",
+            mime="image/jpeg"
+        )
