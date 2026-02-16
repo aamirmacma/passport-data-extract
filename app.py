@@ -1,8 +1,27 @@
 import streamlit as st
 
-import Passport_Auto_PNR
-import Passport_Photo_Maker
-import Passport_Size_Maker
+import passport_auto_pnr
+import passport_photo_maker
+import passport_size_maker
+
+st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
+
+st.title("✈️ Amadeus Auto PNR Builder")
+
+tab1, tab2, tab3 = st.tabs([
+    "Passport Auto PNR",
+    "Passport Photo Maker",
+    "Passport Size Maker"
+])
+
+with tab1:
+    passport_auto_pnr.app()
+
+with tab2:
+    passport_photo_maker.app()
+
+with tab3:
+    passport_size_maker.app()
 
 # ================= PAGE CONFIG =================
 st.set_page_config(
@@ -62,3 +81,4 @@ with tab2:
 
 with tab3:
     Passport_Size_Maker.app()
+
