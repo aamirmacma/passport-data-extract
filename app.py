@@ -1,84 +1,78 @@
 import streamlit as st
 
 # ================= PAGE CONFIG =================
-<div class="header-bar">
-    <div>
-        <div class="header-title">✈️ Passport | Photo | Auto Builder</div>
-        <div style="color:white;font-size:14px;margin-top:2px;">
-            Developed by Aamir Khan
-        </div>
-    </div>
-</div>
-
+st.set_page_config(
+    page_title="Passport | Photo | Auto Builder",
+    layout="wide"
 )
 
-# ================= HEADER STYLE =================
+# ================= STYLE =================
 st.markdown("""
 <style>
 
 .stApp {
-    background-color:#f4f7fb;
+    background-color: #f4f7fb;
 }
 
+/* Header */
 .header-bar {
     background: linear-gradient(90deg,#0b5394,#1c7ed6);
-    padding:16px 22px;
-    border-radius:12px;
+    padding:18px 24px;
+    border-radius:14px;
     margin-bottom:25px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    box-shadow:0 3px 10px rgba(0,0,0,0.15);
+    box-shadow:0 4px 12px rgba(0,0,0,0.15);
 }
 
 .header-title {
-    font-size:26px;
+    font-size:28px;
     font-weight:700;
     color:white;
 }
 
 .header-dev {
-    background:white;
-    color:#0b5394;
-    padding:6px 16px;
-    border-radius:20px;
+    color:white;
     font-size:14px;
-    font-weight:600;
+    margin-top:4px;
+    opacity:0.9;
 }
 
-.home-box {
+/* Info box */
+.info-box {
     background:white;
     padding:20px;
     border-radius:12px;
-    box-shadow:0 2px 8px rgba(0,0,0,0.08);
-    margin-top:10px;
+    box-shadow:0 2px 6px rgba(0,0,0,0.08);
+    margin-top:15px;
 }
 
 </style>
+""", unsafe_allow_html=True)
 
+# ================= HEADER =================
+st.markdown("""
 <div class="header-bar">
-    <div class="header-title">✈️ Amadeus Auto PNR Builder</div>
+    <div class="header-title">✈️ Passport | Photo | Auto Builder</div>
     <div class="header-dev">Developed by Aamir Khan</div>
 </div>
 """, unsafe_allow_html=True)
 
-# ================= HOME CONTENT =================
-
+# ================= MAIN CONTENT =================
 st.markdown("""
-<div class="home-box">
+<div class="info-box">
+<h3>Welcome</h3>
 
-<h3>Welcome to Amadeus Tools</h3>
-
-<p>Select tool from the left sidebar:</p>
+<p>
+Left side menu se ap apna tool select kar sakte hain:
+</p>
 
 <ul>
-<li>Passport Auto PNR</li>
-<li>Passport Photo Maker</li>
-<li>Passport Size Maker</li>
+<li><b>Passport Auto PNR</b> — Passport se automatic Amadeus NM1 & SRDOCS banata hai</li>
+<li><b>Passport Photo Maker</b> — Photo enhance + white background + download</li>
+<li><b>Passport Size Maker</b> — Passport size photo auto resize (Haji format)</li>
 </ul>
 
-<p>This system helps travel agents quickly generate Amadeus entries and prepare passport photos automatically.</p>
-
+<p>
+Har tool alag page par run hota hai taake system stable rahe.
+</p>
 </div>
 """, unsafe_allow_html=True)
-
