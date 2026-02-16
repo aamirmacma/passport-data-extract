@@ -3,91 +3,166 @@ import pytesseract
 import cv2
 import numpy as np
 import re
+import tempfile
 import os
-import uuid
+
 
 # ==============================
 # TESSERACT PATH
 # ==============================
 if os.name == "nt":
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-else:
-    pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
 
-# ==========================================
-# TEXT FINDER FUNCTION
-# ==========================================
+# ==============================
+# CLEAN TEXT FUNCTION
+# ==============================
+def clean_text(t):
+    if not t:
+        return ""
+    t = t.replace("|", "")
+    t = re.sub(r"\s+", " ", t)
+    return t.strip()
+
+
+# ==============================
+# FIELD FINDER
+# ==============================
 def find_value(text, label):
 
-    pattern = rf"{label}\s*(.*)"
-    match = re.search(pattern, text)
+    pattern = rf"{label}\s*[:\-]?\s*(.+)"
+    match = re.search(pattern, text, re.IGNORECASE)
 
     if match:
-        return match.group(1).strip()
+        value = match.group(1)
+        value = value.split("\n")[0]
+        return clean_text(value)
 
     return ""
 
 
-# ==========================================
+# ==============================
+# CNIC FINDER
+# ==============================
+def extract_cnic(text):
+
+    match = re.search(r"\d{5}-\d{7}-\d", text)
+    if match:
+        return match.group()
+    return ""
+
+
+# ==============================
+# DATE FINDER
+# ==============================
+def extract_date(text, label):
+
+    pattern = rf"{label}.*?(\d{{1,2}}\s+[A-Z]{{3}}\s+\d{{4}})"
+    match = re.search(pattern, text, re.IGNORECASE)
+
+    if match:
+        return match.group(1)
+
+    return ""
+
+
+# ==============================
 # MAIN RUN FUNCTION
-# ==========================================
+# ==============================
 def run():
 
-    st.title("🕋 Hajj Booking Form Extractor")
+    st.title("🕋 Hajj Form Extractor")
 
-    uploaded = st.file_uploader(
-        "Upload Hajj Booking Form (JPG)",
+    file = st.file_uploader(
+        "Upload Hajj Booking Form (JPG/PNG)",
         type=["jpg", "jpeg", "png"]
     )
 
-    if not uploaded:
+    if not file:
         return
 
-    temp = f"temp_{uuid.uuid4().hex}.jpg"
+    # save temp
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+        tmp.write(file.getbuffer())
+        path = tmp.name
 
-    with open(temp, "wb") as f:
-        f.write(uploaded.getbuffer())
-
-    img = cv2.imread(temp)
+    img = cv2.imread(path)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.bilateralFilter(gray, 9, 75, 75)
+    gray = cv2.resize(gray, None, fx=1.5, fy=1.5)
+    gray = cv2.GaussianBlur(gray, (3,3), 0)
 
     text = pytesseract.image_to_string(gray).upper()
 
-    os.remove(temp)
+    # ==============================
+    # APPLICANT DATA
+    # ==============================
+    name = find_value(text, "NAME OF APPLICANT")
+    father = find_value(text, "FATHER / HUSBAND NAME")
+    passport = find_value(text, "PASSPORT NO")
+    occupation = find_value(text, "OCCUPATION")
+    country_stay = find_value(text, "COUNTRY STAY IN")
 
-    # ==========================
-    # FIELD EXTRACTION
-    # ==========================
+    dob = extract_date(text, "DATE OF BIRTH")
+    issue = extract_date(text, "DATE OF ISSUE")
+    expiry = extract_date(text, "DATE OF EXPIRY")
 
-    data = {}
+    cnic = extract_cnic(text)
 
-    data["Name"] = find_value(text, "NAME OF APPLICANT")
-    data["Father/Husband"] = find_value(text, "FATHER")
-    data["CNIC"] = re.search(r"\d{5}-\d{7}-\d", text)
-    data["Passport"] = re.search(r"[A-Z]{2}\d{7}", text)
-    data["DOB"] = find_value(text, "DATE OF BIRTH")
-    data["Mobile"] = find_value(text, "MOBILE")
-    data["WhatsApp"] = find_value(text, "WHATSAPP")
-    data["Address"] = find_value(text, "RESIDENT ADDRESS")
+    # ==============================
+    # NOMINEE DATA
+    # ==============================
+    nominee_name = find_value(text, "NAME OF NOMINEE")
+    nominee_relation = find_value(text, "NOMINEE RELATION")
+    nominee_cnic = extract_cnic(text.split("NOMINEE")[-1])
 
-    if data["CNIC"]:
-        data["CNIC"] = data["CNIC"].group()
-    else:
-        data["CNIC"] = ""
+    nominee_mobile = find_value(text, "MOBILE / WHATSAPP")
 
-    if data["Passport"]:
-        data["Passport"] = data["Passport"].group()
-    else:
-        data["Passport"] = ""
-
-    # ==========================
+    # ==============================
     # OUTPUT
-    # ==========================
+    # ==============================
+    st.subheader("Applicant Details")
 
-    st.subheader("Extracted Hajj Form Data")
+    st.table({
+        "Field": [
+            "Applicant Name",
+            "Father / Husband",
+            "CNIC",
+            "Date of Birth",
+            "Passport No",
+            "Date of Issue",
+            "Date of Expiry",
+            "Occupation",
+            "Country Stay"
+        ],
+        "Value": [
+            name,
+            father,
+            cnic,
+            dob,
+            passport,
+            issue,
+            expiry,
+            occupation,
+            country_stay
+        ]
+    })
 
-    for k, v in data.items():
-        st.markdown(f"**{k}:** {v}")
+    st.subheader("Nominee Details")
+
+    st.table({
+        "Field": [
+            "Nominee Name",
+            "Relation",
+            "CNIC",
+            "Mobile"
+        ],
+        "Value": [
+            nominee_name,
+            nominee_relation,
+            nominee_cnic,
+            nominee_mobile
+        ]
+    })
+
+    os.remove(path)
