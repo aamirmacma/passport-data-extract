@@ -1,29 +1,36 @@
 import streamlit as st
-import cv2
-import numpy as np
+from PIL import Image
+import io
 
-st.set_page_config(page_title="Passport Size Maker", layout="wide")
+def run():
 
-st.title("📐 Passport Size Maker")
+    st.subheader("📐 Passport Size Maker")
 
-st.info("JPG format | Max size 500KB")
-
-file = st.file_uploader("Upload Photo", type=["jpg","jpeg"])
-
-if file:
-
-    file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
-    img = cv2.imdecode(file_bytes, 1)
-
-    resized = cv2.resize(img,(120,150))
-
-    st.image(resized, channels="BGR")
-
-    _, buffer = cv2.imencode(".jpg", resized, [int(cv2.IMWRITE_JPEG_QUALITY),90])
-
-    st.download_button(
-        "Download Passport Size",
-        buffer.tobytes(),
-        "passport_size.jpg",
-        "image/jpeg"
+    st.info(
+        "NOTE: JPG format only. Max file size 500KB."
     )
+
+    file = st.file_uploader("Upload Photo", type=["jpg","jpeg"])
+
+    if file:
+
+        img = Image.open(file)
+
+        # Haji size approx
+        img = img.resize((120,150))
+
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=85)
+
+        size_kb = len(buffer.getvalue())/1024
+
+        st.image(img)
+
+        st.write(f"Final Size: {round(size_kb,2)} KB")
+
+        st.download_button(
+            "Download Passport Size Photo",
+            buffer.getvalue(),
+            "passport_size.jpg",
+            "image/jpeg"
+        )
