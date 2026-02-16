@@ -239,73 +239,33 @@ if files:
 
 # ================= OUTPUT =================
 
-nm1_lines=[]
-docs_lines=[]
-
-if passengers:
-
-    st.subheader("Extracted Passport Details")
-
-    for i,p in enumerate(passengers,1):
-
-        st.markdown('<div class="passport-box">',unsafe_allow_html=True)
-        st.write(f"Passenger {i}: {p['surname']} {p['names']}")
-        st.write("Surname:",p["surname"])
-        st.write("Given Name:",p["names"])
-        st.write("Title:",p["title"])
-        st.write("Passport:",p["passport"])
-        st.write("DOB:",p["dob"])
-        st.write("Expiry:",p["exp"])
-        st.write("Father/Husband Name:",p["father"])
-        st.write("Place of Birth:",p["pob"])
-        st.write("Date of Issue:",p["doi"])
-        st.write("CNIC:",p["cnic"])
-        st.markdown('</div>',unsafe_allow_html=True)
-
-    pax=1
-    for p in passengers:
-
-        nm1_lines.append(f"NM1{p['surname']}/{p['names']} {p['title']}")
-
-        docs_lines.append(
-            f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
-            f"{p['country']}-{p['dob']}-{p['gender']}-"
-            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}"
-        )
-        pax+=1
-
-    export_text="\n".join(nm1_lines)+"\n\n"+"\n".join(docs_lines)
-
-    st.markdown('<div class="nm1-box">',unsafe_allow_html=True)
-    st.subheader("NM1 Entries")
-    st.code("\n".join(nm1_lines))
-    st.markdown('</div>',unsafe_allow_html=True)
-
-    st.markdown('<div class="docs-box">',unsafe_allow_html=True)
-    st.subheader("SRDOCS Entries")
-    st.code("\n".join(docs_lines))
-    st.markdown('</div>',unsafe_allow_html=True)
-
-    st.download_button(
-        "⬇ Download Amadeus PNR (TXT)",
-        data=export_text,
-        file_name="amadeus_pnr.txt",
-        mime="text/plain"
-    )
-
-    components.html(f"""
-    <button style="background:#1c7ed6;color:white;
-    padding:10px 18px;border:none;border-radius:6px;
-    font-size:16px;cursor:pointer;"
-    onclick="navigator.clipboard.writeText(`{export_text}`)">
-    📋 Copy PNR to Clipboard
-    </button>
-    """, height=60)
-
 from PIL import Image, ImageEnhance, ImageDraw, ImageFont
+import numpy as np
 import io
 
 passport_no = st.text_input("Enter Passport Number for Photo")
+
+def enhance_passport_photo(pil_img):
+
+    # ---- convert to numpy ----
+    img = np.array(pil_img)
+
+    # ---- background lightening ----
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # light pixels ko aur white karo
+    _, mask = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+    img[mask == 255] = [255,255,255]
+
+    img = Image.fromarray(img)
+
+    # ---- enhancement ----
+    img = ImageEnhance.Brightness(img).enhance(1.15)
+    img = ImageEnhance.Contrast(img).enhance(1.20)
+    img = ImageEnhance.Sharpness(img).enhance(1.25)
+
+    return img
+
 
 if files and passport_no:
 
@@ -313,15 +273,13 @@ if files and passport_no:
 
         img = Image.open(file).convert("RGB")
 
-        # ===== Enhance =====
-        img = ImageEnhance.Brightness(img).enhance(1.1)
-        img = ImageEnhance.Contrast(img).enhance(1.15)
-        img = ImageEnhance.Sharpness(img).enhance(1.2)
+        # enhance + white background
+        img = enhance_passport_photo(img)
 
-        # ===== Resize Passport Size =====
+        # passport size resize
         img = img.resize((140,180))
 
-        # ===== Add Passport Number =====
+        # add passport number
         draw = ImageDraw.Draw(img)
 
         try:
@@ -331,15 +289,15 @@ if files and passport_no:
 
         draw.text((10,160), passport_no, fill="black", font=font)
 
-        # ===== Convert to download =====
+        # prepare download
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
+        img.save(buf, format="JPEG", quality=90)
 
-        st.image(img, caption="Processed Passport Photo")
+        st.image(img, caption="Enhanced Passport Photo")
 
         st.download_button(
             "⬇ Download Passport Photo",
             data=buf.getvalue(),
-            file_name="passport_photo.jpg",
+            file_name=f"{passport_no}_passport.jpg",
             mime="image/jpeg"
         )
