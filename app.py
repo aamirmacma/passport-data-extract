@@ -6,79 +6,77 @@ import os
 import cv2
 import uuid
 import re
-import streamlit.components.v1 as components
+from PIL import Image, ImageEnhance
+import numpy as np
+import io
 
-# ================= TESSERACT AUTO =================
+# ================= TESSERACT =================
 if os.name == "nt":
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 else:
     pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
-# ================= PAGE CONFIG =================
+# ================= PAGE =================
 st.set_page_config(page_title="Amadeus Auto PNR Builder", layout="wide")
 
-# ================= HEADER + STYLE =================
+# ================= STYLE =================
 st.markdown("""
 <style>
-.stApp { background-color:#f4f7fb; }
+.stApp {background:#f4f7fb;}
 
-.header-bar {
-    background: linear-gradient(90deg,#0b5394,#1c7ed6);
-    padding:14px 20px;
-    border-radius:12px;
-    margin-bottom:20px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    box-shadow:0 3px 8px rgba(0,0,0,0.15);
+.header-bar{
+ background:linear-gradient(90deg,#0b5394,#1c7ed6);
+ padding:14px 20px;
+ border-radius:12px;
+ margin-bottom:20px;
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
 }
 
-.header-title {
-    font-size:26px;
-    font-weight:700;
-    color:white;
+.header-title{
+ font-size:26px;
+ font-weight:700;
+ color:white;
 }
 
-.header-dev {
-    background:white;
-    color:#0b5394;
-    padding:6px 14px;
-    border-radius:20px;
-    font-size:14px;
-    font-weight:600;
+.header-dev{
+ background:white;
+ color:#0b5394;
+ padding:6px 14px;
+ border-radius:20px;
+ font-size:14px;
+ font-weight:600;
 }
 
-.passport-box {
-    background:white;
-    padding:15px;
-    border-radius:12px;
-    border-left:5px solid #1c7ed6;
-    margin-bottom:10px;
+.passport-box{
+ background:white;
+ padding:15px;
+ border-radius:12px;
+ border-left:5px solid #1c7ed6;
+ margin-bottom:10px;
 }
 
-.nm1-box {
-    background:#eef5ff;
-    padding:15px;
-    border-radius:12px;
-    border-left:5px solid #2f9e44;
+.nm1-box{
+ background:#eef5ff;
+ padding:15px;
+ border-radius:12px;
 }
 
-.docs-box {
-    background:#f1fff5;
-    padding:15px;
-    border-radius:12px;
-    border-left:5px solid #37b24d;
+.docs-box{
+ background:#f1fff5;
+ padding:15px;
+ border-radius:12px;
 }
 </style>
 
 <div class="header-bar">
-    <div class="header-title">✈️ Amadeus Auto PNR Builder</div>
-    <div class="header-dev">Developed by Aamir Khan</div>
+<div class="header-title">✈️ Amadeus Auto PNR Builder</div>
+<div class="header-dev">Developed by Aamir Khan</div>
 </div>
 """, unsafe_allow_html=True)
 
-# ================= FUNCTIONS =================
-
+# ================= DATE FUNCTIONS =================
 def mrz_date_fix(d):
     if not d or len(d) < 6:
         return datetime.datetime(2000,1,1)
@@ -103,32 +101,36 @@ def calculate_age(d):
     age=today.year-birth.year-((today.month,today.day)<(birth.month,birth.day))
     return age,birth.strftime("%d%b%y").upper()
 
+# ================= TITLE =================
 def passenger_title(age,gender,dob):
     if age >= 12:
         return "MR" if gender=="M" else "MRS"
     elif age >= 2:
-        return "CHD"
+        return f"MSTR(CHD/{dob})" if gender=="M" else f"MISS(CHD/{dob})"
     else:
         return "INF"
 
+# ================= NAME CLEAN =================
 def parse_mrz_names(surname,names):
+
     surname=surname.replace("<","").strip().upper()
+
     names=names.replace("<"," ")
-    names=" ".join(names.split())
+    words=names.split()
 
     clean=[]
-    for w in names.split():
-        if len(w)<=1:
-            continue
-        if len(set(w))==1:   # removes KKKKK
-            continue
-        if w.count("K")>len(w)*0.6:
-            continue
+    for w in words:
+        w=w.strip().upper()
+        if len(w)<=1: continue
+        if len(set(w))==1: continue
+        if w.count("K") > len(w)*0.5: continue
         clean.append(w)
 
     return surname," ".join(clean)
 
+# ================= OCR EXTRA =================
 def extract_extra_fields(path):
+
     img=cv2.imread(path)
     if img is None:
         return "","","",""
@@ -137,19 +139,21 @@ def extract_extra_fields(path):
     text=pytesseract.image_to_string(gray)
 
     father=""; pob=""; doi=""; cnic=""
+
     lines=text.upper().split("\n")
 
     for i,line in enumerate(lines):
+
         if "FATHER" in line or "HUSBAND" in line:
-            if i+1 < len(lines):
+            if i+1<len(lines):
                 father=lines[i+1].strip()
 
         if "PLACE OF BIRTH" in line:
-            if i+1 < len(lines):
+            if i+1<len(lines):
                 pob=lines[i+1].strip()
 
         if "DATE OF ISSUE" in line:
-            if i+1 < len(lines):
+            if i+1<len(lines):
                 doi=lines[i+1].strip()
 
         m=re.search(r"\d{5}-\d{7}-\d",line)
@@ -158,17 +162,24 @@ def extract_extra_fields(path):
 
     return father,pob,doi,cnic
 
-def auto_rotate(path):
-    img=cv2.imread(path)
-    if img is None:
-        return
-    h,w=img.shape[:2]
-    if h>w:
-        img=cv2.rotate(img,cv2.ROTATE_90_CLOCKWISE)
-    cv2.imwrite(path,img)
+# ================= PHOTO ENHANCER =================
+def enhance_passport_photo(pil_img):
+
+    img=np.array(pil_img)
+
+    gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    _,mask=cv2.threshold(gray,200,255,cv2.THRESH_BINARY)
+    img[mask==255]=[255,255,255]
+
+    img=Image.fromarray(img)
+
+    img=ImageEnhance.Brightness(img).enhance(1.15)
+    img=ImageEnhance.Contrast(img).enhance(1.2)
+    img=ImageEnhance.Sharpness(img).enhance(1.25)
+
+    return img
 
 # ================= UPLOAD =================
-
 files=st.file_uploader(
     "Upload Passport Images",
     type=["jpg","jpeg","png"],
@@ -183,11 +194,8 @@ if files:
     for f in files:
 
         temp=f"temp_{uuid.uuid4().hex}.jpg"
-
         with open(temp,"wb") as fp:
             fp.write(f.getbuffer())
-
-        auto_rotate(temp)
 
         try:
             mrz=read_mrz(temp)
@@ -218,17 +226,16 @@ if files:
             exp=safe_date(d.get("expiration_date"))
 
             father,pob,doi,cnic=extract_extra_fields(temp)
-            title=passenger_title(age,gender,dob)
 
             passengers.append({
                 "surname":surname,
                 "names":names,
-                "title":title,
                 "passport":passport,
                 "dob":dob,
                 "exp":exp,
                 "gender":gender,
                 "country":country,
+                "age":age,
                 "father":father,
                 "pob":pob,
                 "doi":doi,
@@ -238,66 +245,58 @@ if files:
         os.remove(temp)
 
 # ================= OUTPUT =================
+nm1_lines=[]
+docs_lines=[]
 
-from PIL import Image, ImageEnhance, ImageDraw, ImageFont
-import numpy as np
-import io
+if passengers:
 
-passport_no = st.text_input("Enter Passport Number for Photo")
+    st.subheader("Extracted Passport Details")
 
-def enhance_passport_photo(pil_img):
+    for i,p in enumerate(passengers,1):
 
-    # ---- convert to numpy ----
-    img = np.array(pil_img)
+        st.markdown('<div class="passport-box">',unsafe_allow_html=True)
 
-    # ---- background lightening ----
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        st.write(f"Passenger {i}: {p['surname']} {p['names']}")
+        st.write("Title:", passenger_title(p["age"],p["gender"],p["dob"]))
+        st.write("Passport:",p["passport"])
+        st.write("DOB:",p["dob"])
+        st.write("Expiry:",p["exp"])
+        st.write("Father/Husband Name:",p["father"])
+        st.write("Place of Birth:",p["pob"])
+        st.write("Date of Issue:",p["doi"])
+        st.write("CNIC:",p["cnic"])
 
-    # light pixels ko aur white karo
-    _, mask = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-    img[mask == 255] = [255,255,255]
+        st.markdown('</div>',unsafe_allow_html=True)
 
-    img = Image.fromarray(img)
+    pax=1
+    for p in passengers:
 
-    # ---- enhancement ----
-    img = ImageEnhance.Brightness(img).enhance(1.15)
-    img = ImageEnhance.Contrast(img).enhance(1.20)
-    img = ImageEnhance.Sharpness(img).enhance(1.25)
+        title=passenger_title(p["age"],p["gender"],p["dob"])
 
-    return img
+        nm1_lines.append(f"NM1{p['surname']}/{p['names']} {title}")
 
-
-if files and passport_no:
-
-    for file in files:
-
-        img = Image.open(file).convert("RGB")
-
-        # enhance + white background
-        img = enhance_passport_photo(img)
-
-        # passport size resize
-        img = img.resize((140,180))
-
-        # add passport number
-        draw = ImageDraw.Draw(img)
-
-        try:
-            font = ImageFont.truetype("arial.ttf", 14)
-        except:
-            font = ImageFont.load_default()
-
-        draw.text((10,160), passport_no, fill="black", font=font)
-
-        # prepare download
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=90)
-
-        st.image(img, caption="Enhanced Passport Photo")
-
-        st.download_button(
-            "⬇ Download Passport Photo",
-            data=buf.getvalue(),
-            file_name=f"{passport_no}_passport.jpg",
-            mime="image/jpeg"
+        docs_lines.append(
+            f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+            f"{p['country']}-{p['dob']}-{p['gender']}-"
+            f"{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}"
         )
+        pax+=1
+
+    export_text="\n".join(nm1_lines)+"\n\n"+"\n".join(docs_lines)
+
+    st.markdown('<div class="nm1-box">',unsafe_allow_html=True)
+    st.subheader("NM1 Entries")
+    st.code("\n".join(nm1_lines))
+    st.markdown('</div>',unsafe_allow_html=True)
+
+    st.markdown('<div class="docs-box">',unsafe_allow_html=True)
+    st.subheader("SRDOCS Entries")
+    st.code("\n".join(docs_lines))
+    st.markdown('</div>',unsafe_allow_html=True)
+
+    st.download_button(
+        "⬇ Download Amadeus PNR (TXT)",
+        data=export_text,
+        file_name="amadeus_pnr.txt",
+        mime="text/plain"
+    )
