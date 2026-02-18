@@ -235,10 +235,14 @@ def run():
 
 
     # ================= OUTPUT =================
-            # ================= OUTPUT =================
+                
     if passengers:
 
         st.subheader("Extracted Passport Details")
+
+        adults = []
+        children = []
+        infants = []
 
         nm1_lines = []
         docs_lines = []
@@ -260,10 +264,15 @@ def run():
             CNIC: {p['cnic']}
             """)
 
-            # ---------- NM1 ----------
-            nm1_lines.append(
-                f"NM1{p['surname']}/{p['names']} {p['title']}"
-            )
+            # ---------- AGE BASED GROUP ----------
+            if p["title"] == "INF":
+                infants.append(p)
+
+            elif p["title"] in ["MSTR", "MISS"]:
+                children.append(p)
+
+            else:
+                adults.append(p)
 
             # ---------- SRDOCS ----------
             docs_lines.append(
@@ -276,7 +285,32 @@ def run():
             pax += 1
 
 
-        # ================= NM1 =================
+        # ================= NM1 BUILD =================
+
+        inf_index = 0
+
+        # ADULT + INFANT
+        for adult in adults:
+
+            nm1 = f"NM1{adult['surname']}/{adult['names']} {adult['title']}"
+
+            if inf_index < len(infants):
+                inf = infants[inf_index]
+                nm1 += f" (INF/{inf['surname']} {inf['names']}/{inf['dob']})"
+                inf_index += 1
+
+            nm1_lines.append(nm1)
+
+
+        # CHILD
+        for chd in children:
+            nm1_lines.append(
+                f"NM1{chd['surname']}/{chd['names']} "
+                f"{chd['title']} (CHD/{chd['dob']})"
+            )
+
+
+        # ================= SHOW NM1 =================
         st.subheader("NM1 Entries")
         st.code("\n".join(nm1_lines))
 
@@ -289,15 +323,8 @@ def run():
         # ================= PNR COMMANDS =================
         st.subheader("PNR Commands")
 
-        dep = (
-            departure_date.strftime("%d%b").upper()
-            if departure_date else "12APR"
-        )
-
-        ret = (
-            return_date.strftime("%d%b").upper()
-            if return_date else "26APR"
-        )
+        dep = departure_date.strftime("%d%b").upper() if departure_date else "18FEB"
+        ret = return_date.strftime("%d%b").upper() if return_date else "18FEB"
 
         pnr_commands = []
 
