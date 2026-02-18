@@ -24,6 +24,9 @@ def run():
     # ---------- DATE FIX ----------
     def mrz_date_fix(d):
         try:
+            if not d or len(str(d)) < 6:
+                return None
+
             d = str(d)
             y = int(d[:2])
             m = int(d[2:4])
@@ -44,40 +47,27 @@ def run():
         return "" if dt is None else dt.strftime("%d%b%y").upper()
 
 
-    # ---------- AGE CALCULATION (Y M D) ----------
-    def calculate_age_full(d):
+    def calculate_age(d):
         birth = mrz_date_fix(d)
+        if birth is None:
+            return 30, ""
+
         today = datetime.datetime.today()
+        age = today.year - birth.year - (
+            (today.month, today.day) < (birth.month, birth.day)
+        )
 
-        years = today.year - birth.year
-        months = today.month - birth.month
-        days = today.day - birth.day
-
-        if days < 0:
-            months -= 1
-            days += 30
-
-        if months < 0:
-            years -= 1
-            months += 12
-
-        return years, months, days
+        return age, birth.strftime("%d%b%y").upper()
 
 
     # ---------- TITLE ----------
-    def passenger_title(age_y, gender):
-
-        if age_y < 2:
-            return "INF"
-
-        elif age_y < 12:
-            return "MSTR" if gender == "M" else "MISS"
-
+    def passenger_title(age, gender):
+        if age >= 12:
+            return "MR" if gender == "M" else "MRS"
+        elif age >= 2:
+            return "CHD"
         else:
-            if gender == "M":
-                return "MR"
-            else:
-                return "MRS"
+            return "INF"
 
 
     # ---------- NAME CLEANER ----------
@@ -156,6 +146,23 @@ def run():
         cv2.imwrite(path, img)
 
 
+    # ================= TRAVEL DETAILS =================
+    st.subheader("Travel Details")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        departure_date = st.date_input("Departure Date")
+
+    with col2:
+        return_date = st.date_input("Return Date")
+
+    total_days = 0
+    if departure_date and return_date:
+        total_days = (return_date - departure_date).days
+        st.success(f"Total Stay: {total_days} Days")
+
+
     # ================= UPLOAD =================
     files = st.file_uploader(
         "Upload Passport Images",
@@ -164,6 +171,7 @@ def run():
     )
 
     passengers = []
+    seen = set()
 
     if files:
 
@@ -176,12 +184,25 @@ def run():
 
             auto_rotate(temp)
 
-            mrz = read_mrz(temp)
+            try:
+                mrz = read_mrz(temp)
+            except:
+                mrz = None
+
             if not mrz:
+                st.warning("MRZ not detected")
                 os.remove(temp)
                 continue
 
             d = mrz.to_dict()
+            passport = d.get("number", "")
+
+            if passport in seen:
+                st.warning(f"Duplicate skipped: {passport}")
+                os.remove(temp)
+                continue
+
+            seen.add(passport)
 
             surname, names = parse_mrz_names(
                 d.get("surname", ""),
@@ -189,25 +210,25 @@ def run():
             )
 
             gender = d.get("sex", "M")
+            country = d.get("country", "PAK")
 
-            age_y, age_m, age_d = calculate_age_full(
-                d.get("date_of_birth")
-            )
+            age, dob = calculate_age(d.get("date_of_birth"))
+            exp = safe_date(d.get("expiration_date"))
 
-            title = passenger_title(age_y, gender)
+            father, cnic = extract_extra_fields(temp)
+            title = passenger_title(age, gender)
 
             passengers.append({
                 "surname": surname,
                 "names": names,
                 "title": title,
-                "dob": safe_date(d.get("date_of_birth")),
-                "exp": safe_date(d.get("expiration_date")),
-                "age_y": age_y,
-                "age_m": age_m,
-                "age_d": age_d,
-                "passport": d.get("number"),
-                "country": d.get("country"),
-                "gender": gender
+                "passport": passport,
+                "dob": dob,
+                "exp": exp,
+                "gender": gender,
+                "country": country,
+                "father": father,
+                "cnic": cnic
             })
 
             os.remove(temp)
@@ -218,42 +239,60 @@ def run():
 
         st.subheader("Extracted Passport Details")
 
-        adults, children, infants = [], [], []
-
-        for p in passengers:
-
-            st.write(
-                f"{p['surname']} {p['names']} | "
-                f"Age: {p['age_y']}Y {p['age_m']}M {p['age_d']}D"
-            )
-
-            if p["title"] == "INF":
-                infants.append(p)
-            elif p["title"] in ["MSTR","MISS"]:
-                children.append(p)
-            else:
-                adults.append(p)
-
-        # ---------- NM1 ----------
         nm1_lines = []
-        inf_index = 0
+        docs_lines = []
 
-        for adult in adults:
+        pax = 1
 
-            nm1 = f"NM1{adult['surname']}/{adult['names']} {adult['title']}"
+        for i, p in enumerate(passengers, 1):
 
-            if inf_index < len(infants):
-                inf = infants[inf_index]
-                nm1 += f" (INF/{inf['surname']} {inf['names']}/{inf['dob']})"
-                inf_index += 1
+            st.markdown(f"""
+            **Passenger {i}**
 
-            nm1_lines.append(nm1)
+            Surname: {p['surname']}  
+            Given Name: {p['names']}  
+            Passport: {p['passport']}  
+            DOB: {p['dob']}  
+            Expiry: {p['exp']}  
+            Gender: {p['gender']}  
+            Father/Husband: {p['father']}  
+            CNIC: {p['cnic']}
+            """)
 
-        for chd in children:
             nm1_lines.append(
-                f"NM1{chd['surname']}/{chd['names']} "
-                f"{chd['title']} (CHD/{chd['dob']})"
+                f"NM1{p['surname']}/{p['names']} {p['title']}"
             )
+
+            docs_lines.append(
+                f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+                f"{p['country']}-{p['dob']}-{p['gender']}-"
+                f"{p['exp']}-{p['surname']}-"
+                f"{p['names'].replace(' ','-')}-H/P{pax}"
+            )
+
+            pax += 1
 
         st.subheader("NM1 Entries")
         st.code("\n".join(nm1_lines))
+
+        st.subheader("SRDOCS Entries")
+        st.code("\n".join(docs_lines))
+
+        # ================= PNR COMMANDS =================
+        st.subheader("PNR Commands")
+
+        dep = departure_date.strftime("%d%b").upper() if departure_date else "12APR"
+        ret = return_date.strftime("%d%b").upper() if return_date else "26APR"
+
+        pnr_commands = [
+            f"AN{dep}KHIJED/ASV",
+            "SS1T3",
+            f"AN{ret}JEDKHI/ASV",
+            "SS1T3",
+            "AP",
+            "TKOK",
+            "ER",
+            "IR"
+        ]
+
+        st.code("\n".join(pnr_commands))
