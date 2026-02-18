@@ -324,29 +324,36 @@ def run():
 
 st.subheader("PNR Commands")
 
-dep = departure_date.strftime("%d%b").upper() if departure_date else "18FEB"
-ret = return_date.strftime("%d%b").upper() if return_date else "18FEB"
+        # safe date handling
+        if departure_date:
+            dep = departure_date.strftime("%d%b").upper()
+        else:
+            dep = "18FEB"
 
-pnr_commands = [
+        if return_date:
+            ret = return_date.strftime("%d%b").upper()
+        else:
+            ret = "18FEB"
 
-    # ---------- NM1 ----------
-    "NM1KHAN/ABDUL BASIT MR",
-    "NM1KHAN/KHAN ALINA MRS",
-    "NM1KHAN/KISWA MS",
-    "NM1KHAN/ABDUL BASIT MR (INF/KHAN AYZAL/22MAY24)",
-    "NM1KHAN/MUHAMMAD AHMAD MSTR (CHD/22MAY22)",
-    "NM1KHAN/MUHAMMAD FATIMA MISS (CHD/22MAY16)",
+        pnr_commands = [
 
-    # ---------- FLIGHT ----------
-    f"AN{dep}KHIJED/ASV",
-    "SS1T3",
-    f"AN{ret}JEDKHI/ASV",
-    "SS1T3",
-    "AP",
-    "TKOK",
-    "ER",
-    "IR"
-]
+            # ---------- NM1 ----------
+            "NM1KHAN/ABDUL BASIT MR",
+            "NM1KHAN/KHAN ALINA MRS",
+            "NM1KHAN/KISWA MS",
+            "NM1KHAN/ABDUL BASIT MR (INF/KHAN AYZAL/22MAY24)",
+            "NM1KHAN/MUHAMMAD AHMAD MSTR (CHD/22MAY22)",
+            "NM1KHAN/MUHAMMAD FATIMA MISS (CHD/22MAY16)",
 
-st.code("\n".join(pnr_commands))
+            # ---------- FLIGHT ----------
+            f"AN{dep}KHIJED/ASV",
+            "SS1T3",
+            f"AN{ret}JEDKHI/ASV",
+            "SS1T3",
+            "AP",
+            "TKOK",
+            "ER",
+            "IR"
+        ]
 
+        st.code("\n".join(pnr_commands))
