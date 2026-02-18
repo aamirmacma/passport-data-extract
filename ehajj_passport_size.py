@@ -3,26 +3,36 @@ from PIL import Image
 import io
 
 # ==========================================
-# IMAGE COMPRESS FUNCTION
+# COMPRESS IMAGE BETWEEN 400KB - 600KB
 # ==========================================
 
-def compress_image_to_range(image, min_kb=400, max_kb=500):
+def compress_image_to_range(image, min_kb=400, max_kb=600):
 
-    quality = 95
+    low = 20
+    high = 95
     best_bytes = None
+    best_size = 0
 
-    while quality >= 20:
+    while low <= high:
+        quality = (low + high) // 2
+
         img_bytes = io.BytesIO()
         image.save(img_bytes, format="JPEG", quality=quality)
+
         size_kb = len(img_bytes.getvalue()) / 1024
 
-        if min_kb <= size_kb <= max_kb:
-            return img_bytes.getvalue(), size_kb
-
         best_bytes = img_bytes.getvalue()
-        quality -= 5
+        best_size = size_kb
 
-    return best_bytes, size_kb
+        if min_kb <= size_kb <= max_kb:
+            return best_bytes, size_kb
+
+        elif size_kb < min_kb:
+            low = quality + 1   # size barhao
+        else:
+            high = quality - 1  # size kam karo
+
+    return best_bytes, best_size
 
 
 # ==========================================
@@ -32,7 +42,7 @@ def compress_image_to_range(image, min_kb=400, max_kb=500):
 def run():
 
     st.title("Passport")
-    st.write("Upload passport image (Auto 400KB – 500KB)")
+    st.write("Upload passport image (Auto 400KB – 600KB)")
 
     uploaded_file = st.file_uploader(
         "Upload passport image",
@@ -44,17 +54,15 @@ def run():
 
         image = Image.open(uploaded_file).convert("RGB")
 
-        st.subheader("Original Image")
         st.image(image, use_column_width=True)
 
-        # Compress image
         compressed_img, final_size = compress_image_to_range(image)
 
         st.success(f"Final Size: {round(final_size,2)} KB")
 
         st.download_button(
-            label="Download Compressed Passport",
-            data=compressed_img,
-            file_name="ehajj_passport_400_500kb.jpg",
-            mime="image/jpeg"
+            "Download Passport Image",
+            compressed_img,
+            "ehajj_passport_400_600kb.jpg",
+            "image/jpeg"
         )
