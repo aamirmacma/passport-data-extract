@@ -92,16 +92,13 @@ with tab3:
 # ==============================
 with tab4:
     Hajj_Form_Extractor.run()
-# ==============================
-# TAB 5
-# ==============================
 
 with tab5:
     ehajj_passport_size.run()
-# ==============================
-# TAB 6
-# ==============================
+
 with tab6:
     ehajj_photo_size.run()
+
+
 
 
