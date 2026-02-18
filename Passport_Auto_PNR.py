@@ -322,7 +322,7 @@ def run():
 
         # ================= PNR COMMANDS =================
 
-st.subheader("PNR Commands")
+        st.subheader("PNR Commands")
 
         # safe date handling
         if departure_date:
@@ -336,16 +336,12 @@ st.subheader("PNR Commands")
             ret = "18FEB"
 
         pnr_commands = [
-
-            # ---------- NM1 ----------
             "NM1KHAN/ABDUL BASIT MR",
             "NM1KHAN/KHAN ALINA MRS",
             "NM1KHAN/KISWA MS",
             "NM1KHAN/ABDUL BASIT MR (INF/KHAN AYZAL/22MAY24)",
             "NM1KHAN/MUHAMMAD AHMAD MSTR (CHD/22MAY22)",
             "NM1KHAN/MUHAMMAD FATIMA MISS (CHD/22MAY16)",
-
-            # ---------- FLIGHT ----------
             f"AN{dep}KHIJED/ASV",
             "SS1T3",
             f"AN{ret}JEDKHI/ASV",
