@@ -76,15 +76,10 @@ def run():
 
         if age_years < 2:
             return "INF"
-
         elif age_years < 12:
             return "MSTR" if gender == "M" else "MISS"
-
         else:
-            if gender == "M":
-                return "MR"
-            else:
-                return "MRS"
+            return "MR" if gender == "M" else "MRS"
 
 
     # ---------- NAME CLEAN ----------
@@ -93,22 +88,7 @@ def run():
             return False
         if len(set(w)) == 1:
             return False
-        if w.count("K") > len(w) * 0.6:
-            return False
         return True
-
-
-    def split_joined_name(name):
-        patterns = [
-            "ABDUR", "ABDUL", "REHMAN", "RAHMAN",
-            "SYED", "AHMED", "MUHAMMAD", "MOHAMMAD",
-            "ALI", "HUSSAIN", "HASSAN", "KHAN"
-        ]
-
-        for p in patterns:
-            name = name.replace(p, " " + p)
-
-        return " ".join(name.split())
 
 
     def parse_mrz_names(surname, names):
@@ -117,12 +97,7 @@ def run():
         names = names.replace("<", " ")
         names = " ".join(names.split()).upper()
 
-        words = []
-        for w in names.split():
-            if clean_word(w):
-                words.append(split_joined_name(w))
-
-        return surname, " ".join(words)
+        return surname, names
 
 
     # ---------- OCR EXTRA ----------
@@ -258,12 +233,16 @@ def run():
 
         st.subheader("Extracted Passport Details")
 
-        for i, p in enumerate(passengers, 1):
+        nm1_lines = []
+        docs_lines = []
+
+        adults, children, infants = [], [], []
+
+        for p in passengers:
 
             st.markdown(f"""
-            **Passenger {i}**
+            **{p['surname']} {p['names']}**
 
-            Name: {p['surname']} {p['names']}  
             Passport: {p['passport']}  
             DOB: {p['dob']}  
             Age: {p['age_y']}Y {p['age_m']}M {p['age_d']}D  
@@ -272,16 +251,6 @@ def run():
             CNIC: {p['cnic']}
             """)
 
-        # ================= NM1 =================
-        st.subheader("NM1 Entries (Amadeus Format)")
-
-        nm1_lines = []
-
-        adults = []
-        children = []
-        infants = []
-
-        for p in passengers:
             if p["title"] == "INF":
                 infants.append(p)
             elif p["title"] in ["MSTR", "MISS"]:
@@ -289,6 +258,7 @@ def run():
             else:
                 adults.append(p)
 
+        # ---------- NM1 ----------
         inf_index = 0
 
         for adult in adults:
@@ -307,9 +277,26 @@ def run():
                 f"NM1{chd['surname']}/{chd['names']} {chd['title']} (CHD/{chd['dob']})"
             )
 
+        st.subheader("NM1 Entries")
         st.code("\n".join(nm1_lines))
 
-        # ================= PNR COMMANDS =================
+        # ---------- SRDOCS ----------
+        pax = 1
+        for p in passengers:
+
+            docs_lines.append(
+                f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+                f"{p['country']}-{p['dob']}-{p['gender']}-"
+                f"{p['exp']}-{p['surname']}-"
+                f"{p['names'].replace(' ','-')}-H/P{pax}"
+            )
+
+            pax += 1
+
+        st.subheader("SRDOCS Entries")
+        st.code("\n".join(docs_lines))
+
+        # ---------- PNR COMMANDS ----------
         st.subheader("PNR Commands")
 
         dep = departure_date.strftime("%d%b").upper() if departure_date else "12APR"
