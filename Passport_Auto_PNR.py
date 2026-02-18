@@ -47,30 +47,47 @@ def run():
         return "" if dt is None else dt.strftime("%d%b%y").upper()
 
 
-    def calculate_age(d):
-        birth = mrz_date_fix(d)
+    # ---------- AGE FULL ----------
+    def calculate_age_full(dob_str):
+
+        birth = mrz_date_fix(dob_str)
         if birth is None:
-            return 30, ""
+            return 0, 0, 0
 
         today = datetime.datetime.today()
-        age = today.year - birth.year - (
-            (today.month, today.day) < (birth.month, birth.day)
-        )
 
-        return age, birth.strftime("%d%b%y").upper()
+        years = today.year - birth.year
+        months = today.month - birth.month
+        days = today.day - birth.day
+
+        if days < 0:
+            months -= 1
+            days += 30
+
+        if months < 0:
+            years -= 1
+            months += 12
+
+        return years, months, days
 
 
     # ---------- TITLE ----------
-    def passenger_title(age, gender):
-        if age >= 12:
-            return "MR" if gender == "M" else "MRS"
-        elif age >= 2:
-            return "CHD"
-        else:
+    def passenger_title(age_years, gender):
+
+        if age_years < 2:
             return "INF"
 
+        elif age_years < 12:
+            return "MSTR" if gender == "M" else "MISS"
 
-    # ---------- NAME CLEANER ----------
+        else:
+            if gender == "M":
+                return "MR"
+            else:
+                return "MRS"
+
+
+    # ---------- NAME CLEAN ----------
     def clean_word(w):
         if len(w) <= 1:
             return False
@@ -157,7 +174,6 @@ def run():
     with col2:
         return_date = st.date_input("Return Date")
 
-    total_days = 0
     if departure_date and return_date:
         total_days = (return_date - departure_date).days
         st.success(f"Total Stay: {total_days} Days")
@@ -184,10 +200,7 @@ def run():
 
             auto_rotate(temp)
 
-            try:
-                mrz = read_mrz(temp)
-            except:
-                mrz = None
+            mrz = read_mrz(temp)
 
             if not mrz:
                 st.warning("MRZ not detected")
@@ -198,7 +211,6 @@ def run():
             passport = d.get("number", "")
 
             if passport in seen:
-                st.warning(f"Duplicate skipped: {passport}")
                 os.remove(temp)
                 continue
 
@@ -212,11 +224,15 @@ def run():
             gender = d.get("sex", "M")
             country = d.get("country", "PAK")
 
-            age, dob = calculate_age(d.get("date_of_birth"))
+            age_y, age_m, age_d = calculate_age_full(
+                d.get("date_of_birth")
+            )
+
+            dob = safe_date(d.get("date_of_birth"))
             exp = safe_date(d.get("expiration_date"))
 
             father, cnic = extract_extra_fields(temp)
-            title = passenger_title(age, gender)
+            title = passenger_title(age_y, gender)
 
             passengers.append({
                 "surname": surname,
@@ -228,7 +244,10 @@ def run():
                 "gender": gender,
                 "country": country,
                 "father": father,
-                "cnic": cnic
+                "cnic": cnic,
+                "age_y": age_y,
+                "age_m": age_m,
+                "age_d": age_d
             })
 
             os.remove(temp)
@@ -239,44 +258,56 @@ def run():
 
         st.subheader("Extracted Passport Details")
 
-        nm1_lines = []
-        docs_lines = []
-
-        pax = 1
-
         for i, p in enumerate(passengers, 1):
 
             st.markdown(f"""
             **Passenger {i}**
 
-            Surname: {p['surname']}  
-            Given Name: {p['names']}  
+            Name: {p['surname']} {p['names']}  
             Passport: {p['passport']}  
             DOB: {p['dob']}  
-            Expiry: {p['exp']}  
+            Age: {p['age_y']}Y {p['age_m']}M {p['age_d']}D  
             Gender: {p['gender']}  
             Father/Husband: {p['father']}  
             CNIC: {p['cnic']}
             """)
 
+        # ================= NM1 =================
+        st.subheader("NM1 Entries (Amadeus Format)")
+
+        nm1_lines = []
+
+        adults = []
+        children = []
+        infants = []
+
+        for p in passengers:
+            if p["title"] == "INF":
+                infants.append(p)
+            elif p["title"] in ["MSTR", "MISS"]:
+                children.append(p)
+            else:
+                adults.append(p)
+
+        inf_index = 0
+
+        for adult in adults:
+
+            nm1 = f"NM1{adult['surname']}/{adult['names']} {adult['title']}"
+
+            if inf_index < len(infants):
+                inf = infants[inf_index]
+                nm1 += f" (INF/{inf['surname']} {inf['names']}/{inf['dob']})"
+                inf_index += 1
+
+            nm1_lines.append(nm1)
+
+        for chd in children:
             nm1_lines.append(
-                f"NM1{p['surname']}/{p['names']} {p['title']}"
+                f"NM1{chd['surname']}/{chd['names']} {chd['title']} (CHD/{chd['dob']})"
             )
 
-            docs_lines.append(
-                f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
-                f"{p['country']}-{p['dob']}-{p['gender']}-"
-                f"{p['exp']}-{p['surname']}-"
-                f"{p['names'].replace(' ','-')}-H/P{pax}"
-            )
-
-            pax += 1
-
-        st.subheader("NM1 Entries")
         st.code("\n".join(nm1_lines))
-
-        st.subheader("SRDOCS Entries")
-        st.code("\n".join(docs_lines))
 
         # ================= PNR COMMANDS =================
         st.subheader("PNR Commands")
