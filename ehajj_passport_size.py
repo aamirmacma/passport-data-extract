@@ -3,36 +3,47 @@ from PIL import Image
 import io
 
 # ==========================================
-# COMPRESS IMAGE BETWEEN 400KB - 600KB
+# RESIZE IMAGE UP (IF SIZE TOO SMALL)
 # ==========================================
 
-def compress_image_to_range(image, min_kb=400, max_kb=600):
+def upscale_image(image, scale=1.2):
+    w, h = image.size
+    new_size = (int(w * scale), int(h * scale))
+    return image.resize(new_size, Image.LANCZOS)
 
-    low = 20
-    high = 95
-    best_bytes = None
-    best_size = 0
 
-    while low <= high:
-        quality = (low + high) // 2
+# ==========================================
+# COMPRESS BETWEEN 400KB - 600KB
+# ==========================================
+
+def compress_to_range(image, min_kb=400, max_kb=600):
+
+    quality = 95
+    final_bytes = None
+    final_size = 0
+
+    while True:
 
         img_bytes = io.BytesIO()
         image.save(img_bytes, format="JPEG", quality=quality)
 
         size_kb = len(img_bytes.getvalue()) / 1024
 
-        best_bytes = img_bytes.getvalue()
-        best_size = size_kb
-
+        # ✅ Perfect range
         if min_kb <= size_kb <= max_kb:
-            return best_bytes, size_kb
+            return img_bytes.getvalue(), size_kb
 
-        elif size_kb < min_kb:
-            low = quality + 1   # size barhao
-        else:
-            high = quality - 1  # size kam karo
+        # ✅ Too small → upscale image
+        if size_kb < min_kb:
+            image = upscale_image(image, 1.15)
+            continue
 
-    return best_bytes, best_size
+        # ✅ Too large → reduce quality
+        if size_kb > max_kb:
+            quality -= 5
+
+        if quality < 20:
+            return img_bytes.getvalue(), size_kb
 
 
 # ==========================================
@@ -56,13 +67,13 @@ def run():
 
         st.image(image, use_column_width=True)
 
-        compressed_img, final_size = compress_image_to_range(image)
+        final_img, final_size = compress_to_range(image)
 
         st.success(f"Final Size: {round(final_size,2)} KB")
 
         st.download_button(
             "Download Passport Image",
-            compressed_img,
+            final_img,
             "ehajj_passport_400_600kb.jpg",
             "image/jpeg"
         )
