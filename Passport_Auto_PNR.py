@@ -72,7 +72,6 @@ def run():
 
     # ---------- NAME CLEANER ----------
     def clean_word(w):
-        # remove garbage words
         if len(w) <= 1:
             return False
         if len(set(w)) == 1:
@@ -83,8 +82,6 @@ def run():
 
 
     def split_joined_name(name):
-
-        # ABDURREHMANSYED -> ABDUR REHMAN SYED
         patterns = [
             "ABDUR", "ABDUL", "REHMAN", "RAHMAN",
             "SYED", "AHMED", "MUHAMMAD", "MOHAMMAD",
@@ -100,7 +97,6 @@ def run():
     def parse_mrz_names(surname, names):
 
         surname = surname.replace("<", "").strip().upper()
-
         names = names.replace("<", " ")
         names = " ".join(names.split()).upper()
 
@@ -150,8 +146,24 @@ def run():
         cv2.imwrite(path, img)
 
 
-    # ================= UPLOAD =================
+    # ================= TRAVEL DETAILS =================
+    st.subheader("Travel Details")
 
+    col1, col2 = st.columns(2)
+
+    with col1:
+        departure_date = st.date_input("Departure Date")
+
+    with col2:
+        return_date = st.date_input("Return Date")
+
+    total_days = 0
+    if departure_date and return_date:
+        total_days = (return_date - departure_date).days
+        st.success(f"Total Stay: {total_days} Days")
+
+
+    # ================= UPLOAD =================
     files = st.file_uploader(
         "Upload Passport Images",
         type=["jpg", "jpeg", "png"],
@@ -221,8 +233,8 @@ def run():
 
             os.remove(temp)
 
-    # ================= OUTPUT =================
 
+    # ================= OUTPUT =================
     if passengers:
 
         st.subheader("Extracted Passport Details")
@@ -265,3 +277,22 @@ def run():
 
         st.subheader("SRDOCS Entries")
         st.code("\n".join(docs_lines))
+
+        # ================= PNR COMMANDS =================
+        st.subheader("PNR Commands")
+
+        dep = departure_date.strftime("%d%b").upper() if departure_date else "12APR"
+        ret = return_date.strftime("%d%b").upper() if return_date else "26APR"
+
+        pnr_commands = [
+            f"AN{dep}KHIJED/ASV",
+            "SS1T3",
+            f"AN{ret}JEDKHI/ASV",
+            "SS1T3",
+            "AP",
+            "TKOK",
+            "ER",
+            "IR"
+        ]
+
+        st.code("\n".join(pnr_commands))
