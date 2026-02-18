@@ -235,7 +235,7 @@ def run():
 
 
     # ================= OUTPUT =================
-    if passengers:
+        if passengers:
 
         st.subheader("Extracted Passport Details")
 
@@ -259,10 +259,12 @@ def run():
             CNIC: {p['cnic']}
             """)
 
+            # ---------- NM1 ----------
             nm1_lines.append(
                 f"NM1{p['surname']}/{p['names']} {p['title']}"
             )
 
+            # ---------- SRDOCS ----------
             docs_lines.append(
                 f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
                 f"{p['country']}-{p['dob']}-{p['gender']}-"
@@ -272,11 +274,16 @@ def run():
 
             pax += 1
 
+
+        # ================= NM1 =================
         st.subheader("NM1 Entries")
         st.code("\n".join(nm1_lines))
 
+
+        # ================= SRDOCS =================
         st.subheader("SRDOCS Entries")
         st.code("\n".join(docs_lines))
+
 
         # ================= PNR COMMANDS =================
         st.subheader("PNR Commands")
@@ -284,7 +291,13 @@ def run():
         dep = departure_date.strftime("%d%b").upper() if departure_date else "12APR"
         ret = return_date.strftime("%d%b").upper() if return_date else "26APR"
 
-        pnr_commands = [
+        pnr_commands = []
+
+        # add NM1 first
+        pnr_commands.extend(nm1_lines)
+
+        # add flight commands
+        pnr_commands.extend([
             f"AN{dep}KHIJED/ASV",
             "SS1T3",
             f"AN{ret}JEDKHI/ASV",
@@ -293,6 +306,6 @@ def run():
             "TKOK",
             "ER",
             "IR"
-        ]
+        ])
 
         st.code("\n".join(pnr_commands))
