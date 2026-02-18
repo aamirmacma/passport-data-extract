@@ -8,6 +8,9 @@ import Passport_Photo_Maker
 import Passport_Size_Maker
 import Hajj_Form_Extractor
 
+import ehajj_passport_size
+import ehajj_photo_size
+
 
 # ==============================
 # PAGE CONFIG
@@ -98,6 +101,7 @@ with tab5:
 
 with tab6:
     ehajj_photo_size.run()
+
 
 
 
