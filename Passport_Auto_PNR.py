@@ -47,24 +47,17 @@ def run():
         return "" if dt is None else dt.strftime("%d%b%y").upper()
 
 
-def calculate_age_full(d):
+    def calculate_age(d):
+        birth = mrz_date_fix(d)
+        if birth is None:
+            return 30, ""
 
-    birth = mrz_date_fix(d)
-    today = datetime.datetime.today()
+        today = datetime.datetime.today()
+        age = today.year - birth.year - (
+            (today.month, today.day) < (birth.month, birth.day)
+        )
 
-    years = today.year - birth.year
-    months = today.month - birth.month
-    days = today.day - birth.day
-
-    if days < 0:
-        months -= 1
-        days += 30
-
-    if months < 0:
-        years -= 1
-        months += 12
-
-    return years, months, days
+        return age, birth.strftime("%d%b%y").upper()
 
 
     # ---------- TITLE ----------
@@ -303,4 +296,3 @@ def calculate_age_full(d):
         ]
 
         st.code("\n".join(pnr_commands))
-
