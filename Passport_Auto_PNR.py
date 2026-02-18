@@ -237,76 +237,62 @@ def run():
     # ================= OUTPUT =================
     if passengers:
 
-    st.subheader("Extracted Passport Details")
+        st.subheader("Extracted Passport Details")
 
-    nm1_lines = []
-    docs_lines = []
+        nm1_lines = []
+        docs_lines = []
 
-    pax = 1
+        pax = 1
 
-    for i, p in enumerate(passengers, 1):
+        for i, p in enumerate(passengers, 1):
 
-        st.markdown(f"""
-        **Passenger {i}**
+            st.markdown(f"""
+            **Passenger {i}**
 
-        Surname: {p['surname']}  
-        Given Name: {p['names']}  
-        Passport: {p['passport']}  
-        DOB: {p['dob']}  
-        Expiry: {p['exp']}  
-        Gender: {p['gender']}  
-        Father/Husband: {p['father']}  
-        CNIC: {p['cnic']}
-        """)
+            Surname: {p['surname']}  
+            Given Name: {p['names']}  
+            Passport: {p['passport']}  
+            DOB: {p['dob']}  
+            Expiry: {p['exp']}  
+            Gender: {p['gender']}  
+            Father/Husband: {p['father']}  
+            CNIC: {p['cnic']}
+            """)
 
-        # ---------- NM1 ----------
-        nm1_lines.append(
-            f"NM1{p['surname']}/{p['names']} {p['title']}"
-        )
+            nm1_lines.append(
+                f"NM1{p['surname']}/{p['names']} {p['title']}"
+            )
 
-        # ---------- SRDOCS ----------
-        docs_lines.append(
-            f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
-            f"{p['country']}-{p['dob']}-{p['gender']}-"
-            f"{p['exp']}-{p['surname']}-"
-            f"{p['names'].replace(' ','-')}-H/P{pax}"
-        )
+            docs_lines.append(
+                f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+                f"{p['country']}-{p['dob']}-{p['gender']}-"
+                f"{p['exp']}-{p['surname']}-"
+                f"{p['names'].replace(' ','-')}-H/P{pax}"
+            )
 
-        pax += 1
+            pax += 1
 
+        st.subheader("NM1 Entries")
+        st.code("\n".join(nm1_lines))
 
-    # ================= NM1 =================
-    st.subheader("NM1 Entries")
-    st.code("\n".join(nm1_lines))
+        st.subheader("SRDOCS Entries")
+        st.code("\n".join(docs_lines))
 
+        # ================= PNR COMMANDS =================
+        st.subheader("PNR Commands")
 
-    # ================= SRDOCS =================
-    st.subheader("SRDOCS Entries")
-    st.code("\n".join(docs_lines))
+        dep = departure_date.strftime("%d%b").upper() if departure_date else "12APR"
+        ret = return_date.strftime("%d%b").upper() if return_date else "26APR"
 
+        pnr_commands = [
+            f"AN{dep}KHIJED/ASV",
+            "SS1T3",
+            f"AN{ret}JEDKHI/ASV",
+            "SS1T3",
+            "AP",
+            "TKOK",
+            "ER",
+            "IR"
+        ]
 
-    # ================= PNR COMMANDS =================
-    st.subheader("PNR Commands")
-
-    dep = departure_date.strftime("%d%b").upper() if departure_date else "12APR"
-    ret = return_date.strftime("%d%b").upper() if return_date else "26APR"
-
-    # NM1 + Flight Commands together
-    pnr_commands = []
-
-    # add NM1 first
-    pnr_commands.extend(nm1_lines)
-
-    # add flight commands
-    pnr_commands.extend([
-        f"AN{dep}KHIJED/ASV",
-        "SS1T3",
-        f"AN{ret}JEDKHI/ASV",
-        "SS1T3",
-        "AP",
-        "TKOK",
-        "ER",
-        "IR"
-    ])
-
-    st.code("\n".join(pnr_commands))
+        st.code("\n".join(pnr_commands))
