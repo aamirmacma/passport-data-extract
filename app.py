@@ -55,12 +55,15 @@ st.write("")
 # ==============================
 # MAIN TABS
 # ==============================
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Passport Auto PNR",
     "Passport Photo Maker",
     "Passport Size Maker",
-    "Hajj Form Extractor"
+    "Hajj Form Extractor",
+    "eHajj Passport Size",
+    "eHajj Photo Size"
 ])
+
 
 
 # ==============================
@@ -89,3 +92,16 @@ with tab3:
 # ==============================
 with tab4:
     Hajj_Form_Extractor.run()
+# ==============================
+# TAB 5
+# ==============================
+
+with tab5:
+    ehajj_passport_size.run()
+# ==============================
+# TAB 6
+# ==============================
+with tab6:
+    ehajj_photo_size.run()
+
+
