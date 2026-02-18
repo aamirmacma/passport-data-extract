@@ -236,7 +236,80 @@ def run():
 
     # ================= OUTPUT =================
                 
-    
+    if passengers:
+
+        st.subheader("Extracted Passport Details")
+
+        adults = []
+        children = []
+        infants = []
+
+        nm1_lines = []
+        docs_lines = []
+
+        pax = 1
+
+        for i, p in enumerate(passengers, 1):
+
+            st.markdown(f"""
+            **Passenger {i}**
+
+            Surname: {p['surname']}  
+            Given Name: {p['names']}  
+            Passport: {p['passport']}  
+            DOB: {p['dob']}  
+            Expiry: {p['exp']}  
+            Gender: {p['gender']}  
+            Father/Husband: {p['father']}  
+            CNIC: {p['cnic']}
+            """)
+
+            # ---------- AGE BASED GROUP ----------
+            if p["title"] == "INF":
+                infants.append(p)
+
+            elif p["title"] in ["MSTR", "MISS"]:
+                children.append(p)
+
+            else:
+                adults.append(p)
+
+            # ---------- SRDOCS ----------
+            docs_lines.append(
+                f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+                f"{p['country']}-{p['dob']}-{p['gender']}-"
+                f"{p['exp']}-{p['surname']}-"
+                f"{p['names'].replace(' ','-')}-H/P{pax}"
+            )
+
+            pax += 1
+
+
+        # ================= NM1 BUILD =================
+
+        inf_index = 0
+
+        # ADULT + INFANT
+        for adult in adults:
+
+            nm1 = f"NM1{adult['surname']}/{adult['names']} {adult['title']}"
+
+            if inf_index < len(infants):
+                inf = infants[inf_index]
+                nm1 += f" (INF/{inf['surname']} {inf['names']}/{inf['dob']})"
+                inf_index += 1
+
+            nm1_lines.append(nm1)
+
+
+        # CHILD
+        for chd in children:
+            nm1_lines.append(
+                f"NM1{chd['surname']}/{chd['names']} "
+                f"{chd['title']} (CHD/{chd['dob']})"
+            )
+
+
         # ================= SHOW NM1 =================
         st.subheader("NM1 Entries")
         st.code("\n".join(nm1_lines))
@@ -249,113 +322,34 @@ def run():
 
         # ================= PNR COMMANDS =================
 
-      if passengers:
+        st.subheader("PNR Commands")
 
-    st.subheader("Extracted Passport Details")
-
-    nm1_lines = []
-    docs_lines = []
-
-    adults = []
-    children = []
-    infants = []
-
-    pax = 1
-
-    # ---------- PASSENGER LOOP ----------
-    for i, p in enumerate(passengers, 1):
-
-        # AGE CLASSIFICATION
-        if p["age_y"] < 2:
-            p["title"] = "INF"
-            infants.append(p)
-
-        elif p["age_y"] < 12:
-            p["title"] = "MSTR" if p["gender"] == "M" else "MISS"
-            children.append(p)
-
+        # safe date handling
+        if departure_date:
+            dep = departure_date.strftime("%d%b").upper()
         else:
-            p["title"] = "MR" if p["gender"] == "M" else "MRS"
-            adults.append(p)
+            dep = "18FEB"
 
-        st.markdown(f"""
-        **Passenger {i}**
+        if return_date:
+            ret = return_date.strftime("%d%b").upper()
+        else:
+            ret = "18FEB"
 
-        Surname: {p['surname']}  
-        Given Name: {p['names']}  
-        Passport: {p['passport']}  
-        DOB: {p['dob']}  
-        Expiry: {p['exp']}  
-        Gender: {p['gender']}  
-        Age: {p['age_y']}Y {p['age_m']}M {p['age_d']}D  
-        Father/Husband: {p['father']}  
-        CNIC: {p['cnic']}
-        """)
+        pnr_commands = [
+            "NM1KHAN/ABDUL BASIT MR",
+            "NM1KHAN/KHAN ALINA MRS",
+            "NM1KHAN/KISWA MS",
+            "NM1KHAN/ABDUL BASIT MR (INF/KHAN AYZAL/22MAY24)",
+            "NM1KHAN/MUHAMMAD AHMAD MSTR (CHD/22MAY22)",
+            "NM1KHAN/MUHAMMAD FATIMA MISS (CHD/22MAY16)",
+            f"AN{dep}KHIJED/ASV",
+            "SS1T3",
+            f"AN{ret}JEDKHI/ASV",
+            "SS1T3",
+            "AP",
+            "TKOK",
+            "ER",
+            "IR"
+        ]
 
-        # ---------- SRDOCS ----------
-        docs_lines.append(
-            f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
-            f"{p['country']}-{p['dob']}-{p['gender']}-"
-            f"{p['exp']}-{p['surname']}-"
-            f"{p['names'].replace(' ','-')}-H/P{pax}"
-        )
-
-        pax += 1
-
-
-    # ================= NM1 BUILD =================
-    inf_index = 0
-
-    for adult in adults:
-
-        nm1 = f"NM1{adult['surname']}/{adult['names']} {adult['title']}"
-
-        if inf_index < len(infants):
-            inf = infants[inf_index]
-            nm1 += f" (INF/{inf['surname']} {inf['names']}/{inf['dob']})"
-            inf_index += 1
-
-        nm1_lines.append(nm1)
-
-    for chd in children:
-        nm1_lines.append(
-            f"NM1{chd['surname']}/{chd['names']} "
-            f"{chd['title']} (CHD/{chd['dob']})"
-        )
-
-
-    # ================= NM1 SHOW =================
-    st.subheader("NM1 Entries")
-    st.code("\n".join(nm1_lines))
-
-
-    # ================= SRDOCS SHOW =================
-    st.subheader("SRDOCS Entries")
-    st.code("\n".join(docs_lines))
-
-
-    # ================= PNR COMMANDS (LAST) =================
-    st.subheader("PNR Commands")
-
-    dep = departure_date.strftime("%d%b").upper() if departure_date else "18FEB"
-    ret = return_date.strftime("%d%b").upper() if return_date else "18FEB"
-
-    pnr_commands = []
-
-    # NM1 first
-    pnr_commands.extend(nm1_lines)
-
-    # flight commands
-    pnr_commands.extend([
-        f"AN{dep}KHIJED/ASV",
-        "SS1T3",
-        f"AN{ret}JEDKHI/ASV",
-        "SS1T3",
-        "AP",
-        "TKOK",
-        "ER",
-        "IR"
-    ])
-
-    st.code("\n".join(pnr_commands))
-
+        st.code("\n".join(pnr_commands))
