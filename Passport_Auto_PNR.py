@@ -237,29 +237,62 @@ def run():
     # ================= OUTPUT =================
     if passengers:
 
-    # NM1 & SRDOCS code
+        st.subheader("Extracted Passport Details")
 
-    # ================= PNR COMMANDS =================
-    st.subheader("PNR Commands")
+        nm1_lines = []
+        docs_lines = []
 
-    dep = departure_date.strftime("%d%b").upper() if departure_date else "18FEB"
-    ret = return_date.strftime("%d%b").upper() if return_date else "18FEB"
+        pax = 1
 
-    pnr_commands = [
-        "NM1KHAN/ABDUL BASIT MR",
-        "NM1KHAN/KHAN ALINA MRS",
-        "NM1KHAN/KISWA MS",
-        "NM1KHAN/ABDUL BASIT MR (INF/KHAN AYZAL/22MAY24)",
-        "NM1KHAN/MUHAMMAD AHMAD MSTR (CHD/22MAY22)",
-        "NM1KHAN/MUHAMMAD FATIMA MISS (CHD/22MAY16)",
-        f"AN{dep}KHIJED/ASV",
-        "SS1T3",
-        f"AN{ret}JEDKHI/ASV",
-        "SS1T3",
-        "AP",
-        "TKOK",
-        "ER",
-        "IR"
-    ]
+        for i, p in enumerate(passengers, 1):
 
-    st.code("\n".join(pnr_commands))
+            st.markdown(f"""
+            **Passenger {i}**
+
+            Surname: {p['surname']}  
+            Given Name: {p['names']}  
+            Passport: {p['passport']}  
+            DOB: {p['dob']}  
+            Expiry: {p['exp']}  
+            Gender: {p['gender']}  
+            Father/Husband: {p['father']}  
+            CNIC: {p['cnic']}
+            """)
+
+            nm1_lines.append(
+                f"NM1{p['surname']}/{p['names']} {p['title']}"
+            )
+
+            docs_lines.append(
+                f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
+                f"{p['country']}-{p['dob']}-{p['gender']}-"
+                f"{p['exp']}-{p['surname']}-"
+                f"{p['names'].replace(' ','-')}-H/P{pax}"
+            )
+
+            pax += 1
+
+        st.subheader("NM1 Entries")
+        st.code("\n".join(nm1_lines))
+
+        st.subheader("SRDOCS Entries")
+        st.code("\n".join(docs_lines))
+
+        # ================= PNR COMMANDS =================
+        st.subheader("PNR Commands")
+
+        dep = departure_date.strftime("%d%b").upper() if departure_date else "12APR"
+        ret = return_date.strftime("%d%b").upper() if return_date else "26APR"
+
+        pnr_commands = [
+            f"AN{dep}KHIJED/ASV",
+            "SS1T3",
+            f"AN{ret}JEDKHI/ASV",
+            "SS1T3",
+            "AP",
+            "TKOK",
+            "ER",
+            "IR"
+        ]
+
+        st.code("\n".join(pnr_commands))
