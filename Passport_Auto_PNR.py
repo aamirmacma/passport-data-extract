@@ -235,7 +235,8 @@ def run():
 
 
     # ================= OUTPUT =================
-        if passengers:
+            # ================= OUTPUT =================
+    if passengers:
 
         st.subheader("Extracted Passport Details")
 
@@ -288,15 +289,22 @@ def run():
         # ================= PNR COMMANDS =================
         st.subheader("PNR Commands")
 
-        dep = departure_date.strftime("%d%b").upper() if departure_date else "12APR"
-        ret = return_date.strftime("%d%b").upper() if return_date else "26APR"
+        dep = (
+            departure_date.strftime("%d%b").upper()
+            if departure_date else "12APR"
+        )
+
+        ret = (
+            return_date.strftime("%d%b").upper()
+            if return_date else "26APR"
+        )
 
         pnr_commands = []
 
-        # add NM1 first
+        # NM1 first
         pnr_commands.extend(nm1_lines)
 
-        # add flight commands
+        # Flight commands
         pnr_commands.extend([
             f"AN{dep}KHIJED/ASV",
             "SS1T3",
