@@ -1,15 +1,39 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageChops, ImageOps
 import io
 
 # ==========================================
-# RESIZE IMAGE UP (IF SIZE TOO SMALL)
+# AUTO ROTATE (FIX MOBILE ROTATION)
 # ==========================================
 
-def upscale_image(image, scale=1.2):
+def auto_rotate(image):
+    try:
+        image = ImageOps.exif_transpose(image)
+    except:
+        pass
+    return image
+
+
+# ==========================================
+# AUTO CROP EXTRA BORDER
+# ==========================================
+
+def auto_crop(image):
+    bg = Image.new(image.mode, image.size, image.getpixel((0, 0)))
+    diff = ImageChops.difference(image, bg)
+    bbox = diff.getbbox()
+    if bbox:
+        return image.crop(bbox)
+    return image
+
+
+# ==========================================
+# UPSCALE IMAGE (IF SIZE SMALL)
+# ==========================================
+
+def upscale_image(image, scale=1.15):
     w, h = image.size
-    new_size = (int(w * scale), int(h * scale))
-    return image.resize(new_size, Image.LANCZOS)
+    return image.resize((int(w*scale), int(h*scale)), Image.LANCZOS)
 
 
 # ==========================================
@@ -19,8 +43,6 @@ def upscale_image(image, scale=1.2):
 def compress_to_range(image, min_kb=400, max_kb=600):
 
     quality = 95
-    final_bytes = None
-    final_size = 0
 
     while True:
 
@@ -29,16 +51,13 @@ def compress_to_range(image, min_kb=400, max_kb=600):
 
         size_kb = len(img_bytes.getvalue()) / 1024
 
-        # ✅ Perfect range
         if min_kb <= size_kb <= max_kb:
             return img_bytes.getvalue(), size_kb
 
-        # ✅ Too small → upscale image
         if size_kb < min_kb:
-            image = upscale_image(image, 1.15)
+            image = upscale_image(image)
             continue
 
-        # ✅ Too large → reduce quality
         if size_kb > max_kb:
             quality -= 5
 
@@ -53,7 +72,7 @@ def compress_to_range(image, min_kb=400, max_kb=600):
 def run():
 
     st.title("Passport")
-    st.write("Upload passport image (Auto 400KB – 600KB)")
+    st.write("Upload passport image (Auto Straight + 400KB–600KB)")
 
     uploaded_file = st.file_uploader(
         "Upload passport image",
@@ -65,8 +84,16 @@ def run():
 
         image = Image.open(uploaded_file).convert("RGB")
 
+        # ✅ Step 1 Rotate
+        image = auto_rotate(image)
+
+        # ✅ Step 2 Crop borders
+        image = auto_crop(image)
+
+        st.subheader("Processed Preview")
         st.image(image, use_column_width=True)
 
+        # ✅ Step 3 Compress
         final_img, final_size = compress_to_range(image)
 
         st.success(f"Final Size: {round(final_size,2)} KB")
