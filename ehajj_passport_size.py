@@ -3,64 +3,58 @@ from PIL import Image
 import io
 
 # ==========================================
-# eHAJJ PASSPORT SIZE MAKER
+# IMAGE COMPRESS FUNCTION
+# ==========================================
+
+def compress_image_to_range(image, min_kb=400, max_kb=500):
+
+    quality = 95
+    best_bytes = None
+
+    while quality >= 20:
+        img_bytes = io.BytesIO()
+        image.save(img_bytes, format="JPEG", quality=quality)
+        size_kb = len(img_bytes.getvalue()) / 1024
+
+        if min_kb <= size_kb <= max_kb:
+            return img_bytes.getvalue(), size_kb
+
+        best_bytes = img_bytes.getvalue()
+        quality -= 5
+
+    return best_bytes, size_kb
+
+
+# ==========================================
+# MAIN PAGE
 # ==========================================
 
 def run():
 
-    st.markdown("""
-    <style>
-    .box {
-        background:#f5f7fa;
-        padding:20px;
-        border-radius:10px;
-        border:1px solid #e0e0e0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
     st.title("Passport")
-    st.write("Please upload the pilgrim's passport")
-
-    st.markdown('<div class="box">', unsafe_allow_html=True)
+    st.write("Upload passport image (Auto 400KB – 500KB)")
 
     uploaded_file = st.file_uploader(
-        "Upload passport image (JPG/PNG, 400–1200 x 400–2000px, max 2MB).",
+        "Upload passport image",
         type=["jpg", "jpeg", "png"],
         key="ehajj_passport_upload"
     )
 
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # ===============================
-    # IMAGE PROCESS
-    # ===============================
     if uploaded_file is not None:
 
-        image = Image.open(uploaded_file)
+        image = Image.open(uploaded_file).convert("RGB")
 
-        width, height = image.size
-
-        st.subheader("Preview")
+        st.subheader("Original Image")
         st.image(image, use_column_width=True)
 
-        st.write(f"Image Size: {width} x {height}px")
+        # Compress image
+        compressed_img, final_size = compress_image_to_range(image)
 
-        # Basic validation
-        if width < 400 or height < 400:
-            st.error("Image size is too small. Minimum size is 400x400 px.")
-        elif width > 2000 or height > 2000:
-            st.warning("Image is larger than recommended size.")
-        else:
-            st.success("Passport image uploaded successfully.")
-
-        # Download option
-        img_bytes = io.BytesIO()
-        image.save(img_bytes, format="PNG")
+        st.success(f"Final Size: {round(final_size,2)} KB")
 
         st.download_button(
-            label="Download Image",
-            data=img_bytes.getvalue(),
-            file_name="ehajj_passport.png",
-            mime="image/png"
+            label="Download Compressed Passport",
+            data=compressed_img,
+            file_name="ehajj_passport_400_500kb.jpg",
+            mime="image/jpeg"
         )
