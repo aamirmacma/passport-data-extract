@@ -9,10 +9,18 @@ import io
 # =====================================================
 
 import cv2
+import os
 
-# Path ko dynamic banayen
+# Haarcascade ka path retrieve karen
 cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-face_cascade = cv2.CascadeClassifier(cascade_path)
+
+# Check karen ke file exist karti hai ya nahi
+if not os.path.exists(cascade_path):
+    print(f"Error: Cascade file not found at {cascade_path}")
+    # Agar file nahi milti to ek dummy object ya empty variable pass karen
+    face_cascade = None 
+else:
+    face_cascade = cv2.CascadeClassifier(cascade_path)
 
 
 # =====================================================
