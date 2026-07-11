@@ -1,11 +1,11 @@
 import streamlit as st
 
-# Streamlit branding ko hide karne ka CSS
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
             footer {visibility: hidden;}
             header {visibility: hidden;}
+            .viewerBadge_container__1QSob {visibility: hidden !important;}
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
