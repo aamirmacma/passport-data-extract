@@ -8,9 +8,11 @@ import io
 # FACE DETECTOR (OpenCV Haarcascade)
 # =====================================================
 
-face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-)
+import cv2
+
+# Path ko dynamic banayen
+cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+face_cascade = cv2.CascadeClassifier(cascade_path)
 
 
 # =====================================================
