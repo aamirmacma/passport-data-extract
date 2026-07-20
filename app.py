@@ -1,4 +1,11 @@
 import streamlit as st
+import os
+os.system("pip uninstall -y opencv-python")
+
+# Yahan se aapka baqi ka purana code shuru hoga, jaise:
+import streamlit as st
+import Passport_Auto_PNR
+# ... baqi code ...
 
 hide_streamlit_style = """
             <style>
