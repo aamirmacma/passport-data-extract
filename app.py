@@ -1,3 +1,17 @@
+import sys
+import subprocess
+
+# App start hone se pehle zabardasti dono OpenCV ura kar sirf sahi wala (Headless) install karna
+subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python", "opencv-python-headless"])
+subprocess.call([sys.executable, "-m", "pip", "install", "opencv-python-headless==4.8.1.78"])
+
+# ==========================================
+# Yahan se aapka baqi normal code shuru hoga
+# ==========================================
+import streamlit as st
+# import Passport_Auto_PNR
+# ... (baqi sab waise hi rehne dein)
+
 import streamlit as st
 
 hide_streamlit_style = """
