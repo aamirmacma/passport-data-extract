@@ -8,29 +8,28 @@ import io
 # FACE DETECTOR (OpenCV Haarcascade)
 # =====================================================
 
-import cv2
-import os
-
 # Haarcascade ka path retrieve karen
 cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
 
-# Check karen ke file exist karti hai ya nahi
-if not os.path.exists(cascade_path):
-    print(f"Error: Cascade file not found at {cascade_path}")
-    # Agar file nahi milti to ek dummy object ya empty variable pass karen
-    face_cascade = None 
-else:
-    face_cascade = cv2.CascadeClassifier(cascade_path)
-
+# Direct load karen. Streamlit cloud environments mein baaz dafa os.path.exists 
+# internal packages ke liye theek se kaam nahi karta.
+face_cascade = cv2.CascadeClassifier(cascade_path)
 
 # =====================================================
 # FACE DETECTION
 # =====================================================
 
 def detect_face(image):
+    # Safe check: agar model load nahi hua toh crash karne ke bajaye empty array return karein
+    if face_cascade.empty():
+        st.error("Error: Face detection model load nahi ho saka. Path issue.")
+        return []
 
+    # PIL Image ko numpy array mein convert karein
     img_np = np.array(image)
-    gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+    
+    # PIL images RGB format mein hoti hain, unhe direct RGB se GRAY mein convert karna behtar hai
+    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
 
     faces = face_cascade.detectMultiScale(
         gray,
