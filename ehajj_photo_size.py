@@ -5,41 +5,37 @@ from PIL import Image
 import io
 
 # =====================================================
-# FACE DETECTOR (OpenCV Haarcascade)
-# =====================================================
-
-# Haarcascade ka path retrieve karen
-cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-
-# Direct load karen. Streamlit cloud environments mein baaz dafa os.path.exists 
-# internal packages ke liye theek se kaam nahi karta.
-face_cascade = cv2.CascadeClassifier(cascade_path)
-
-# =====================================================
-# FACE DETECTION
+# FACE DETECTION (Lazy Load)
 # =====================================================
 
 def detect_face(image):
-    # Safe check: agar model load nahi hua toh crash karne ke bajaye empty array return karein
-    if face_cascade.empty():
-        st.error("Error: Face detection model load nahi ho saka. Path issue.")
+    try:
+        # Haar cascade ko function ke andar load karein taake import ke waqt error na aaye
+        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        
+        if face_cascade.empty():
+            st.error("Error: Face detection model load nahi ho saka. Path issue.")
+            return []
+
+        # PIL Image ko numpy array mein convert karein
+        img_np = np.array(image)
+        
+        # RGB se GRAY mein convert karein
+        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+
+        faces = face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.2,
+            minNeighbors=5,
+            minSize=(100, 100)
+        )
+
+        return faces
+    except Exception as e:
+        # Agar OpenCV crash hota hai toh red screen ke bajaye app ke andar error dikhaye
+        st.error(f"OpenCV Error encountered: {e}")
         return []
-
-    # PIL Image ko numpy array mein convert karein
-    img_np = np.array(image)
-    
-    # PIL images RGB format mein hoti hain, unhe direct RGB se GRAY mein convert karna behtar hai
-    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-
-    faces = face_cascade.detectMultiScale(
-        gray,
-        scaleFactor=1.2,
-        minNeighbors=5,
-        minSize=(100, 100)
-    )
-
-    return faces
-
 
 # =====================================================
 # PREPARE PHOTO (WHITE BG + SIZE)
@@ -59,7 +55,6 @@ def prepare_photo(image):
     bg.paste(image, (0, 0))
 
     return bg
-
 
 # =====================================================
 # COMPRESS TO 7KB - 12KB
@@ -88,7 +83,6 @@ def compress_photo(image):
 
     return final_bytes, final_size
 
-
 # =====================================================
 # VERIFICATION UI
 # =====================================================
@@ -115,7 +109,6 @@ def verification_ui(face_detected):
     st.success("✅ Lighting Conditions")
     st.success("✅ Image Properties")
     st.success("✅ Background Checks")
-
 
 # =====================================================
 # MAIN PAGE
