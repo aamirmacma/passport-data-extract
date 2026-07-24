@@ -13,205 +13,149 @@ if os.name == "nt":
 else:
     pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
-
-# ==================================================
-# MAIN FUNCTION
-# ==================================================
 def run():
-
-    # Professional Header & Title
-    st.markdown("<h1 style='text-align: center; color: #1F4E78;'>🕋 AL FATTAH MUNAZZAM (PVT) LTD.</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: gray;'>Passport Auto PNR Builder</h3>", unsafe_allow_html=True)
-    st.markdown("---")
+    st.header("✈️ Passport Auto PNR Builder")
 
     # ---------- DATE FIX ----------
     def mrz_date_fix(d):
         try:
-            if not d or len(str(d)) < 6:
-                return None
-
+            if not d or len(str(d)) < 6: return None
             d = str(d)
             y = int(d[:2])
             m = int(d[2:4])
             da = int(d[4:6])
-
-            if y > datetime.datetime.now().year % 100:
-                y += 1900
-            else:
-                y += 2000
-
+            if y > datetime.datetime.now().year % 100: y += 1900
+            else: y += 2000
             return datetime.datetime(y, m, da)
-        except:
-            return None
-
+        except: return None
 
     def safe_date(d):
         dt = mrz_date_fix(d)
         return "" if dt is None else dt.strftime("%d%b%y").upper()
 
-
     def calculate_age(d):
         birth = mrz_date_fix(d)
-        if birth is None:
-            return 30, ""
-
+        if birth is None: return 30, ""
         today = datetime.datetime.today()
-        age = today.year - birth.year - (
-            (today.month, today.day) < (birth.month, birth.day)
-        )
-
+        age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
         return age, birth.strftime("%d%b%y").upper()
-
 
     # ---------- TITLE ----------
     def passenger_title(age, gender):
-        if age >= 12:
-            return "MR" if gender == "M" else "MRS"
-        elif age >= 2:
-            return "CHD"
-        else:
-            return "INF"
-
+        if age >= 12: return "MR" if gender == "M" else "MRS"
+        elif age >= 2: return "CHD"
+        else: return "INF"
 
     # ---------- NAME CLEANER ----------
     def clean_word(w):
-        if len(w) <= 1:
-            return False
-        if len(set(w)) == 1:
-            return False
-        if w.count("K") > len(w) * 0.6:
-            return False
+        if len(w) <= 1: return False
+        if len(set(w)) == 1: return False
+        if w.count("K") > len(w) * 0.6: return False
         return True
 
-
     def split_joined_name(name):
-        patterns = [
-            "ABDUR", "ABDUL", "REHMAN", "RAHMAN",
-            "SYED", "AHMED", "MUHAMMAD", "MOHAMMAD",
-            "ALI", "HUSSAIN", "HASSAN", "KHAN"
-        ]
-
+        patterns = ["ABDUR", "ABDUL", "REHMAN", "RAHMAN", "SYED", "AHMED", "MUHAMMAD", "MOHAMMAD", "ALI", "HUSSAIN", "HASSAN", "KHAN"]
         for p in patterns:
             name = name.replace(p, " " + p)
-
         return " ".join(name.split())
 
-
     def parse_mrz_names(surname, names):
-
         surname = surname.replace("<", "").strip().upper()
         names = names.replace("<", " ")
         names = " ".join(names.split()).upper()
-
         words = []
         for w in names.split():
             if clean_word(w):
                 words.append(split_joined_name(w))
-
         return surname, " ".join(words)
-
 
     # ---------- OCR EXTRA ----------
     def extract_extra_fields(path):
-
         img = cv2.imread(path)
-        if img is None:
-            return "", ""
-
+        if img is None: return "", ""
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         text = pytesseract.image_to_string(gray).upper()
-
-        father = ""
-        cnic = ""
-
+        father, cnic = "", ""
         lines = text.split("\n")
-
         for i, line in enumerate(lines):
-
             if "FATHER" in line or "HUSBAND" in line:
                 if i + 1 < len(lines):
                     father = lines[i+1].strip()
-
             m = re.search(r"\d{5}-\d{7}-\d", line)
-            if m:
-                cnic = m.group()
-
+            if m: cnic = m.group()
         return father, cnic
 
-
-    def auto_rotate(path):
+    # ---------- NEW SMART MRZ READER ----------
+    def read_mrz_smart(path):
         img = cv2.imread(path)
-        if img is None:
-            return
+        if img is None: return None
+        
+        # 1. Bina ghumaaye check karo
+        try:
+            mrz = read_mrz(path)
+            if mrz and mrz.to_dict(): return mrz
+        except: pass
+
+        test_path = path + "_test.jpg"
+        
+        # 2. Agar nahi mila toh 4 angles try karo
+        angles = [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE]
+        for angle in angles:
+            test_img = cv2.rotate(img, angle)
+            cv2.imwrite(test_path, test_img)
+            try:
+                mrz = read_mrz(test_path)
+                if mrz and mrz.to_dict():
+                    cv2.imwrite(path, test_img)
+                    if os.path.exists(test_path): os.remove(test_path)
+                    return mrz
+            except: pass
+
+        # 3. Double Page Scan fix (Sirf bottom half check karo)
         h, w = img.shape[:2]
         if h > w:
-            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-        cv2.imwrite(path, img)
+            bottom_half = img[int(h/2):h, :]
+            cv2.imwrite(test_path, bottom_half)
+            try:
+                mrz = read_mrz(test_path)
+                if mrz and mrz.to_dict():
+                    if os.path.exists(test_path): os.remove(test_path)
+                    return mrz
+            except: pass
 
+        if os.path.exists(test_path): os.remove(test_path)
+        return None
 
     # ================= TRAVEL DETAILS =================
     st.subheader("Travel Details")
 
     col1, col2 = st.columns(2)
-
-    with col1:
-        departure_date = st.date_input("Departure Date")
-
-    with col2:
-        return_date = st.date_input("Return Date")
+    with col1: departure_date = st.date_input("Departure Date")
+    with col2: return_date = st.date_input("Return Date")
 
     total_days = 0
     if departure_date and return_date:
         total_days = (return_date - departure_date).days
         st.success(f"Total Stay: {total_days} Days")
 
-
     # ================= UPLOAD =================
-    files = st.file_uploader(
-        "Upload Passport Images",
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True
-    )
+    files = st.file_uploader("Upload Passport Images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
     passengers = []
     seen = set()
 
     if files:
-
         for f in files:
-
             temp = f"temp_{uuid.uuid4().hex}.jpg"
-
             with open(temp, "wb") as fp:
                 fp.write(f.getbuffer())
 
-            # Aap ka purana rotation function
-            auto_rotate(temp)
-
-            try:
-                mrz = read_mrz(temp)
-            except:
-                mrz = None
-
-            # ---> MAGIC FIX: Agar seedhi tasweer par detect nahi hua, toh code usay mazeed ghuma kar khud check kar lega
-            if not mrz:
-                img = cv2.imread(temp)
-                if img is not None:
-                    for _ in range(3):
-                        img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-                        cv2.imwrite(temp, img)
-                        try:
-                            mrz = read_mrz(temp)
-                            if mrz: 
-                                break  # Agar mil gaya toh ghumaana band kar do
-                        except:
-                            pass
-            # <--- MAGIC FIX END
+            # Naya Smart Reader
+            mrz = read_mrz_smart(temp)
 
             if not mrz:
-                st.warning("MRZ not detected")
-                if os.path.exists(temp):
-                    os.remove(temp)
+                st.warning(f"MRZ not detected! Please upload a clear image for {f.name}.")
+                if os.path.exists(temp): os.remove(temp)
                 continue
 
             d = mrz.to_dict()
@@ -219,159 +163,71 @@ def run():
 
             if passport in seen:
                 st.warning(f"Duplicate skipped: {passport}")
-                if os.path.exists(temp):
-                    os.remove(temp)
+                if os.path.exists(temp): os.remove(temp)
                 continue
 
             seen.add(passport)
 
-            surname, names = parse_mrz_names(
-                d.get("surname", ""),
-                d.get("names", "")
-            )
-
+            surname, names = parse_mrz_names(d.get("surname", ""), d.get("names", ""))
             gender = d.get("sex", "M")
             country = d.get("country", "PAK")
-
             age, dob = calculate_age(d.get("date_of_birth"))
             exp = safe_date(d.get("expiration_date"))
-
             father, cnic = extract_extra_fields(temp)
             title = passenger_title(age, gender)
 
             passengers.append({
-                "surname": surname,
-                "names": names,
-                "title": title,
-                "passport": passport,
-                "dob": dob,
-                "exp": exp,
-                "gender": gender,
-                "country": country,
-                "father": father,
-                "cnic": cnic
+                "surname": surname, "names": names, "title": title, "passport": passport,
+                "dob": dob, "exp": exp, "gender": gender, "country": country,
+                "father": father, "cnic": cnic
             })
 
-            if os.path.exists(temp):
-                os.remove(temp)
-
+            if os.path.exists(temp): os.remove(temp)
 
     # ================= OUTPUT =================
-            
     if passengers:
-
         st.subheader("Extracted Passport Details")
 
-        adults = []
-        children = []
-        infants = []
-
-        nm1_lines = []
-        docs_lines = []
-
+        adults, children, infants = [], [], []
+        nm1_lines, docs_lines = [], []
         pax = 1
 
         for i, p in enumerate(passengers, 1):
+            st.markdown(f"**Passenger {i}**\n\nSurname: {p['surname']}  \nGiven Name: {p['names']}  \nPassport: {p['passport']}  \nDOB: {p['dob']}  \nExpiry: {p['exp']}  \nGender: {p['gender']}  \nFather/Husband: {p['father']}  \nCNIC: {p['cnic']}")
 
-            st.markdown(f"""
-            **Passenger {i}**
+            if p["title"] == "INF": infants.append(p)
+            elif p["title"] in ["MSTR", "MISS", "CHD"]: children.append(p)
+            else: adults.append(p)
 
-            Surname: {p['surname']}  
-            Given Name: {p['names']}  
-            Passport: {p['passport']}  
-            DOB: {p['dob']}  
-            Expiry: {p['exp']}  
-            Gender: {p['gender']}  
-            Father/Husband: {p['father']}  
-            CNIC: {p['cnic']}
-            """)
-
-            # ---------- AGE BASED GROUP ----------
-            if p["title"] == "INF":
-                infants.append(p)
-
-            elif p["title"] in ["MSTR", "MISS"]:
-                children.append(p)
-
-            else:
-                adults.append(p)
-
-            # ---------- SRDOCS ----------
-            docs_lines.append(
-                f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-"
-                f"{p['country']}-{p['dob']}-{p['gender']}-"
-                f"{p['exp']}-{p['surname']}-"
-                f"{p['names'].replace(' ','-')}-H/P{pax}"
-            )
-
+            docs_lines.append(f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-{p['country']}-{p['dob']}-{p['gender']}-{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}")
             pax += 1
 
-
-        # ================= NM1 BUILD =================
-
         inf_index = 0
-
-        # ADULT + INFANT
         for adult in adults:
-
             nm1 = f"NM1{adult['surname']}/{adult['names']} {adult['title']}"
-
             if inf_index < len(infants):
                 inf = infants[inf_index]
                 nm1 += f" (INF/{inf['surname']} {inf['names']}/{inf['dob']})"
                 inf_index += 1
-
             nm1_lines.append(nm1)
 
-
-        # CHILD
         for chd in children:
-            nm1_lines.append(
-                f"NM1{chd['surname']}/{chd['names']} "
-                f"{chd['title']} (CHD/{chd['dob']})"
-            )
+            nm1_lines.append(f"NM1{chd['surname']}/{chd['names']} {chd['title']} (CHD/{chd['dob']})")
 
-
-        # ================= SHOW NM1 =================
         st.subheader("NM1 Entries")
         st.code("\n".join(nm1_lines))
 
-
-        # ================= SRDOCS =================
         st.subheader("SRDOCS Entries")
         st.code("\n".join(docs_lines))
 
-
-        # ================= PNR COMMANDS =================
-
         st.subheader("PNR Commands")
-
-        # safe date handling
-        if departure_date:
-            dep = departure_date.strftime("%d%b").upper()
-        else:
-            dep = "18FEB"
-
-        if return_date:
-            ret = return_date.strftime("%d%b").upper()
-        else:
-            ret = "18FEB"
+        dep = departure_date.strftime("%d%b").upper() if departure_date else "18FEB"
+        ret = return_date.strftime("%d%b").upper() if return_date else "18FEB"
 
         pnr_commands = [
-            "NM1KHAN/ABDUL BASIT MR",
-            "NM1KHAN/KHAN ALINA MRS",
-            "NM1KHAN/KISWA MS",
-            "NM1KHAN/ABDUL BASIT MR (INF/KHAN AYZAL/22MAY24)",
-            "NM1KHAN/MUHAMMAD AHMAD MSTR (CHD/22MAY22)",
-            "NM1KHAN/MUHAMMAD FATIMA MISS (CHD/22MAY16)",
-            f"AN{dep}KHIJED/ASV",
-            "SS1T3",
-            f"AN{ret}JEDKHI/ASV",
-            "SS1T3",
-            "AP",
-            "TKOK",
-            "ER",
-            "IR"
+            "NM1KHAN/ABDUL BASIT MR", "NM1KHAN/KHAN ALINA MRS", "NM1KHAN/KISWA MS",
+            "NM1KHAN/ABDUL BASIT MR (INF/KHAN AYZAL/22MAY24)", "NM1KHAN/MUHAMMAD AHMAD MSTR (CHD/22MAY22)",
+            "NM1KHAN/MUHAMMAD FATIMA MISS (CHD/22MAY16)", f"AN{dep}KHIJED/ASV", "SS1T3",
+            f"AN{ret}JEDKHI/ASV", "SS1T3", "AP", "TKOK", "ER", "IR"
         ]
-
         st.code("\n".join(pnr_commands))
