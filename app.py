@@ -132,7 +132,6 @@ def run():
                     mrz = read_mrz(test_path)
                     if mrz and mrz.to_dict():
                         # Jab sahi page mil jaye toh usey save kar lo
-                        # Taake neechay wala OCR (Tesseract) perfectly Father/CNIC parh sakay
                         cv2.imwrite(path, test_img)
                         if os.path.exists(test_path):
                             os.remove(test_path)
@@ -275,3 +274,8 @@ def run():
         ]
 
         st.code("\n".join(pnr_commands))
+
+
+# Code ko chalanay (run) ka command yahan hai!
+if __name__ == "__main__":
+    run()
