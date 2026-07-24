@@ -98,7 +98,6 @@ def run():
 
 
     def parse_mrz_names(surname, names):
-
         surname = surname.replace("<", "").strip().upper()
         names = names.replace("<", " ")
         names = " ".join(names.split()).upper()
@@ -113,7 +112,6 @@ def run():
 
     # ---------- OCR EXTRA ----------
     def extract_extra_fields(path):
-
         img = cv2.imread(path)
         if img is None:
             return "", ""
@@ -127,7 +125,6 @@ def run():
         lines = text.split("\n")
 
         for i, line in enumerate(lines):
-
             if "FATHER" in line or "HUSBAND" in line:
                 if i + 1 < len(lines):
                     father = lines[i+1].strip()
@@ -139,15 +136,45 @@ def run():
         return father, cnic
 
 
-    # ---------- ORIGINAL AUTO ROTATE (RESTORED) ----------
-    def auto_rotate(path):
+    # ---------- ADVANCED MRZ DETECTOR (QUALITY LOSE KIYE BINA) ----------
+    def find_and_rotate_mrz(path):
         img = cv2.imread(path)
         if img is None:
-            return
-        h, w = img.shape[:2]
-        if h > w:
-            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-        cv2.imwrite(path, img)
+            return None
+        
+        # 4 angles test karega bina quality kharab kiye
+        angles = [
+            None, # Original
+            cv2.ROTATE_90_CLOCKWISE,
+            cv2.ROTATE_180,
+            cv2.ROTATE_90_COUNTERCLOCKWISE
+        ]
+        
+        temp_test_path = path + "_test.jpg"
+        
+        for angle in angles:
+            if angle is not None:
+                rotated_img = cv2.rotate(img, angle)
+            else:
+                rotated_img = img
+                
+            cv2.imwrite(temp_test_path, rotated_img)
+            
+            try:
+                mrz = read_mrz(temp_test_path)
+                if mrz and mrz.to_dict():
+                    # MRZ mil gaya! Asal tasweer ko is sahi angle mein save kar do
+                    cv2.imwrite(path, rotated_img)
+                    if os.path.exists(temp_test_path):
+                        os.remove(temp_test_path)
+                    return mrz
+            except:
+                pass
+                
+        if os.path.exists(temp_test_path):
+            os.remove(temp_test_path)
+            
+        return None
 
 
     # ================= TRAVEL DETAILS =================
@@ -178,24 +205,17 @@ def run():
     seen = set()
 
     if files:
-
         for f in files:
-
             temp = f"temp_{uuid.uuid4().hex}.jpg"
 
             with open(temp, "wb") as fp:
                 fp.write(f.getbuffer())
 
-            # Wapis purana aur reliable tareeqa lagaya gaya hai
-            auto_rotate(temp)
-
-            try:
-                mrz = read_mrz(temp)
-            except:
-                mrz = None
+            # Smart function jo har angle try karega
+            mrz = find_and_rotate_mrz(temp)
 
             if not mrz:
-                st.error("MRZ not detected. Kripya clear aur saaf tasweer upload karein jis mein glare na ho.")
+                st.error(f"MRZ not detected for image {f.name}. Kripya clear aur saaf tasweer upload karein jis mein passport ke neechay wala hissa (MRZ code) wazeh ho.")
                 if os.path.exists(temp):
                     os.remove(temp)
                 continue
@@ -244,7 +264,6 @@ def run():
     # ================= OUTPUT =================
             
     if passengers:
-
         st.subheader("📑 Extracted Passport Details")
 
         adults = []
@@ -257,7 +276,6 @@ def run():
         pax = 1
 
         for i, p in enumerate(passengers, 1):
-
             st.markdown(f"""
             **Passenger {i}**
 
@@ -274,10 +292,8 @@ def run():
             # ---------- AGE BASED GROUP ----------
             if p["title"] == "INF":
                 infants.append(p)
-
             elif p["title"] in ["MSTR", "MISS", "CHD"]:
                 children.append(p)
-
             else:
                 adults.append(p)
 
@@ -288,26 +304,19 @@ def run():
                 f"{p['exp']}-{p['surname']}-"
                 f"{p['names'].replace(' ','-')}-H/P{pax}"
             )
-
             pax += 1
 
-
         # ================= NM1 BUILD =================
-
         inf_index = 0
 
         # ADULT + INFANT
         for adult in adults:
-
             nm1 = f"NM1{adult['surname']}/{adult['names']} {adult['title']}"
-
             if inf_index < len(infants):
                 inf = infants[inf_index]
                 nm1 += f" (INF/{inf['surname']} {inf['names']}/{inf['dob']})"
                 inf_index += 1
-
             nm1_lines.append(nm1)
-
 
         # CHILD
         for chd in children:
@@ -316,22 +325,17 @@ def run():
                 f"{chd['title']} (CHD/{chd['dob']})"
             )
 
-
         # ================= SHOW NM1 =================
         st.subheader("📋 NM1 Entries")
         st.code("\n".join(nm1_lines))
-
 
         # ================= SRDOCS =================
         st.subheader("📋 SRDOCS Entries")
         st.code("\n".join(docs_lines))
 
-
         # ================= PNR COMMANDS =================
-
         st.subheader("💻 PNR Commands")
 
-        # safe date handling
         if departure_date:
             dep = departure_date.strftime("%d%b").upper()
         else:
