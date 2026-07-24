@@ -1,27 +1,27 @@
 import sys
 import subprocess
+import streamlit as st
 
 # App start hone se pehle zabardasti dono OpenCV ura kar sirf sahi wala (Headless) install karna
 subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python", "opencv-python-headless"])
 subprocess.call([sys.executable, "-m", "pip", "install", "opencv-python-headless==4.8.1.78"])
 
-# ==========================================
-# Yahan se aapka baqi normal code shuru hoga
-# ==========================================
-import streamlit as st
-# import Passport_Auto_PNR
-# ... (baqi sab waise hi rehne dein)
-
-import streamlit as st
+# ==============================
+# PAGE CONFIG (Yeh hamesha sab se upar hona chahiye)
+# ==============================
+st.set_page_config(
+    page_title="Passport | Photo | Auto Builder",
+    layout="wide"
+)
 
 hide_streamlit_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            .viewerBadge_container__1QSob {visibility: hidden !important;}
-            </style>
-            """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .viewerBadge_container__1QSob {visibility: hidden !important;}
+    </style>
+"""
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ==============================
@@ -31,19 +31,8 @@ import Passport_Auto_PNR
 import Passport_Photo_Maker
 import Passport_Size_Maker
 import Hajj_Form_Extractor
-
 import ehajj_passport_size
 import ehajj_photo_size
-
-
-# ==============================
-# PAGE CONFIG
-# ==============================
-st.set_page_config(
-    page_title="Passport | Photo | Auto Builder",
-    layout="wide"
-)
-
 
 # ==============================
 # HEADER DESIGN
@@ -78,7 +67,6 @@ st.markdown("""
 
 st.write("")
 
-
 # ==============================
 # MAIN TABS
 # ==============================
@@ -91,32 +79,18 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "eHajj Photo Size"
 ])
 
-
-
 # ==============================
-# TAB 1
+# TABS CONTENT
 # ==============================
 with tab1:
     Passport_Auto_PNR.run()
 
-
-# ==============================
-# TAB 2
-# ==============================
 with tab2:
     Passport_Photo_Maker.run()
 
-
-# ==============================
-# TAB 3
-# ==============================
 with tab3:
     Passport_Size_Maker.run()
 
-
-# ==============================
-# TAB 4
-# ==============================
 with tab4:
     Hajj_Form_Extractor.run()
 
@@ -125,8 +99,3 @@ with tab5:
 
 with tab6:
     ehajj_photo_size.run()
-
-
-
-
-
