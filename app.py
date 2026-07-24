@@ -1,281 +1,132 @@
+import sys
+import subprocess
+
+# App start hone se pehle zabardasti dono OpenCV ura kar sirf sahi wala (Headless) install karna
+subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python", "opencv-python-headless"])
+subprocess.call([sys.executable, "-m", "pip", "install", "opencv-python-headless==4.8.1.78"])
+
+# ==========================================
+# Yahan se aapka baqi normal code shuru hoga
+# ==========================================
 import streamlit as st
-from passporteye import read_mrz
-import datetime
-import pytesseract
-import os
-import cv2
-import uuid
-import re
+# import Passport_Auto_PNR
+# ... (baqi sab waise hi rehne dein)
 
-# ================= TESSERACT =================
-if os.name == "nt":
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-else:
-    pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+import streamlit as st
 
+hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            .viewerBadge_container__1QSob {visibility: hidden !important;}
+            </style>
+            """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# ==================================================
-# MAIN FUNCTION
-# ==================================================
-def run():
+# ==============================
+# IMPORT ALL PAGES
+# ==============================
+import Passport_Auto_PNR
+import Passport_Photo_Maker
+import Passport_Size_Maker
+import Hajj_Form_Extractor
 
-    # Professional Header & Title
-    st.markdown("<h1 style='text-align: center; color: #1F4E78;'>🕋 AL FATTAH MUNAZZAM (PVT) LTD.</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: gray;'>Passport Auto PNR Builder</h3>", unsafe_allow_html=True)
-    st.markdown("---")
-
-    # ---------- DATE FIX ----------
-    def mrz_date_fix(d):
-        try:
-            if not d or len(str(d)) < 6:
-                return None
-            d = str(d)
-            y = int(d[:2])
-            m = int(d[2:4])
-            da = int(d[4:6])
-            if y > datetime.datetime.now().year % 100:
-                y += 1900
-            else:
-                y += 2000
-            return datetime.datetime(y, m, da)
-        except:
-            return None
-
-    def safe_date(d):
-        dt = mrz_date_fix(d)
-        return "" if dt is None else dt.strftime("%d%b%y").upper()
-
-    def calculate_age(d):
-        birth = mrz_date_fix(d)
-        if birth is None: return 30, ""
-        today = datetime.datetime.today()
-        age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
-        return age, birth.strftime("%d%b%y").upper()
-
-    # ---------- TITLE ----------
-    def passenger_title(age, gender):
-        if age >= 12: return "MR" if gender == "M" else "MRS"
-        elif age >= 2: return "CHD"
-        else: return "INF"
-
-    # ---------- NAME CLEANER ----------
-    def clean_word(w):
-        if len(w) <= 1: return False
-        if len(set(w)) == 1: return False
-        if w.count("K") > len(w) * 0.6: return False
-        return True
-
-    def split_joined_name(name):
-        patterns = ["ABDUR", "ABDUL", "REHMAN", "RAHMAN", "SYED", "AHMED", "MUHAMMAD", "MOHAMMAD", "ALI", "HUSSAIN", "HASSAN", "KHAN"]
-        for p in patterns:
-            name = name.replace(p, " " + p)
-        return " ".join(name.split())
-
-    def parse_mrz_names(surname, names):
-        surname = surname.replace("<", "").strip().upper()
-        names = names.replace("<", " ")
-        names = " ".join(names.split()).upper()
-        words = []
-        for w in names.split():
-            if clean_word(w):
-                words.append(split_joined_name(w))
-        return surname, " ".join(words)
-
-    # ---------- OCR EXTRA ----------
-    def extract_extra_fields(path):
-        img = cv2.imread(path)
-        if img is None: return "", ""
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        text = pytesseract.image_to_string(gray).upper()
-        father = ""
-        cnic = ""
-        lines = text.split("\n")
-        for i, line in enumerate(lines):
-            if "FATHER" in line or "HUSBAND" in line:
-                if i + 1 < len(lines):
-                    father = lines[i+1].strip()
-            m = re.search(r"\d{5}-\d{7}-\d", line)
-            if m: cnic = m.group()
-        return father, cnic
-
-    # ---------- SMART CROP & ROTATE MRZ (MAGIC FIX) ----------
-    def get_mrz_robustly(path):
-        img = cv2.imread(path)
-        if img is None: 
-            return None
-            
-        h, w = img.shape[:2]
-        
-        # Tasweer ke mukhtalif hissay (Puri, Upar wali aadhi, Neechay wali aadhi)
-        crops = [img]
-        if h > w: 
-            # Agar tasweer lambai mein hai (Aap ke passport ki tarah)
-            crops.append(img[int(h/2):h, :]) # Neechay wala hissa
-            crops.append(img[0:int(h/2), :]) # Upar wala hissa
-        else: 
-            # Agar tasweer chorai mein hai
-            crops.append(img[:, 0:int(w/2)]) # Left hissa
-            crops.append(img[:, int(w/2):w]) # Right hissa
-            
-        test_path = path + "_test.jpg"
-        
-        for crop in crops:
-            angles = [None, cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE]
-            for angle in angles:
-                if angle is not None:
-                    test_img = cv2.rotate(crop, angle)
-                else:
-                    test_img = crop
-                    
-                cv2.imwrite(test_path, test_img)
-                try:
-                    mrz = read_mrz(test_path)
-                    if mrz and mrz.to_dict():
-                        # Jab sahi page mil jaye toh usey save kar lo
-                        cv2.imwrite(path, test_img)
-                        if os.path.exists(test_path):
-                            os.remove(test_path)
-                        return mrz
-                except:
-                    pass
-                    
-        if os.path.exists(test_path):
-            os.remove(test_path)
-        return None
+import ehajj_passport_size
+import ehajj_photo_size
 
 
-    # ================= TRAVEL DETAILS =================
-    st.subheader("Travel Details")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        departure_date = st.date_input("Departure Date")
-    with col2:
-        return_date = st.date_input("Return Date")
-
-    total_days = 0
-    if departure_date and return_date:
-        total_days = (return_date - departure_date).days
-        st.success(f"Total Stay: {total_days} Days")
-
-    # ================= UPLOAD =================
-    files = st.file_uploader(
-        "Upload Passport Images",
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True
-    )
-
-    passengers = []
-    seen = set()
-
-    if files:
-        for f in files:
-            temp = f"temp_{uuid.uuid4().hex}.jpg"
-            with open(temp, "wb") as fp:
-                fp.write(f.getbuffer())
-
-            # Yahan par naya Smart Cropping system lag gaya hai
-            mrz = get_mrz_robustly(temp)
-
-            if not mrz:
-                st.error("MRZ not detected. Kripya tasweer thori saaf karke upload karein.")
-                if os.path.exists(temp):
-                    os.remove(temp)
-                continue
-
-            d = mrz.to_dict()
-            passport = d.get("number", "")
-
-            if passport in seen:
-                st.warning(f"Duplicate skipped: {passport}")
-                if os.path.exists(temp):
-                    os.remove(temp)
-                continue
-
-            seen.add(passport)
-
-            surname, names = parse_mrz_names(d.get("surname", ""), d.get("names", ""))
-            gender = d.get("sex", "M")
-            country = d.get("country", "PAK")
-            age, dob = calculate_age(d.get("date_of_birth"))
-            exp = safe_date(d.get("expiration_date"))
-            father, cnic = extract_extra_fields(temp)
-            title = passenger_title(age, gender)
-
-            passengers.append({
-                "surname": surname, "names": names, "title": title, "passport": passport,
-                "dob": dob, "exp": exp, "gender": gender, "country": country,
-                "father": father, "cnic": cnic
-            })
-
-            if os.path.exists(temp):
-                os.remove(temp)
-
-    # ================= OUTPUT =================
-    if passengers:
-        st.subheader("Extracted Passport Details")
-
-        adults = []
-        children = []
-        infants = []
-        nm1_lines = []
-        docs_lines = []
-        pax = 1
-
-        for i, p in enumerate(passengers, 1):
-            st.markdown(f"""
-            **Passenger {i}**
-
-            Surname: {p['surname']}  
-            Given Name: {p['names']}  
-            Passport: {p['passport']}  
-            DOB: {p['dob']}  
-            Expiry: {p['exp']}  
-            Gender: {p['gender']}  
-            Father/Husband: {p['father']}  
-            CNIC: {p['cnic']}
-            """)
-
-            if p["title"] == "INF": infants.append(p)
-            elif p["title"] in ["MSTR", "MISS", "CHD"]: children.append(p)
-            else: adults.append(p)
-
-            docs_lines.append(f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-{p['country']}-{p['dob']}-{p['gender']}-{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}")
-            pax += 1
-
-        # ================= NM1 BUILD =================
-        inf_index = 0
-        for adult in adults:
-            nm1 = f"NM1{adult['surname']}/{adult['names']} {adult['title']}"
-            if inf_index < len(infants):
-                inf = infants[inf_index]
-                nm1 += f" (INF/{inf['surname']} {inf['names']}/{inf['dob']})"
-                inf_index += 1
-            nm1_lines.append(nm1)
-
-        for chd in children:
-            nm1_lines.append(f"NM1{chd['surname']}/{chd['names']} {chd['title']} (CHD/{chd['dob']})")
-
-        st.subheader("NM1 Entries")
-        st.code("\n".join(nm1_lines))
-
-        st.subheader("SRDOCS Entries")
-        st.code("\n".join(docs_lines))
-
-        st.subheader("PNR Commands")
-        dep = departure_date.strftime("%d%b").upper() if departure_date else "18FEB"
-        ret = return_date.strftime("%d%b").upper() if return_date else "18FEB"
-
-        pnr_commands = [
-            "NM1KHAN/ABDUL BASIT MR", "NM1KHAN/KHAN ALINA MRS", "NM1KHAN/KISWA MS",
-            "NM1KHAN/ABDUL BASIT MR (INF/KHAN AYZAL/22MAY24)", "NM1KHAN/MUHAMMAD AHMAD MSTR (CHD/22MAY22)",
-            "NM1KHAN/MUHAMMAD FATIMA MISS (CHD/22MAY16)", f"AN{dep}KHIJED/ASV", "SS1T3",
-            f"AN{ret}JEDKHI/ASV", "SS1T3", "AP", "TKOK", "ER", "IR"
-        ]
-
-        st.code("\n".join(pnr_commands))
+# ==============================
+# PAGE CONFIG
+# ==============================
+st.set_page_config(
+    page_title="Passport | Photo | Auto Builder",
+    layout="wide"
+)
 
 
-# Code ko chalanay (run) ka command yahan hai!
-if __name__ == "__main__":
-    run()
+# ==============================
+# HEADER DESIGN
+# ==============================
+st.markdown("""
+<style>
+.main-header {
+    background: linear-gradient(90deg,#0d47a1,#1976d2);
+    padding: 18px;
+    border-radius: 10px;
+    color: white;
+    font-size: 26px;
+    font-weight: bold;
+}
+.dev {
+    float:right;
+    background:white;
+    color:#0d47a1;
+    padding:5px 12px;
+    border-radius:20px;
+    font-size:14px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="main-header">
+✈️ Passport | Photo | Auto Builder
+<span class="dev">Developed by Aamir Khan</span>
+</div>
+""", unsafe_allow_html=True)
+
+st.write("")
+
+
+# ==============================
+# MAIN TABS
+# ==============================
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "Passport Auto PNR",
+    "Passport Photo Maker",
+    "Passport Size Maker",
+    "Hajj Form Extractor",
+    "eHajj Passport Size",
+    "eHajj Photo Size"
+])
+
+
+
+# ==============================
+# TAB 1
+# ==============================
+with tab1:
+    Passport_Auto_PNR.run()
+
+
+# ==============================
+# TAB 2
+# ==============================
+with tab2:
+    Passport_Photo_Maker.run()
+
+
+# ==============================
+# TAB 3
+# ==============================
+with tab3:
+    Passport_Size_Maker.run()
+
+
+# ==============================
+# TAB 4
+# ==============================
+with tab4:
+    Hajj_Form_Extractor.run()
+
+with tab5:
+    ehajj_passport_size.run()
+
+with tab6:
+    ehajj_photo_size.run()
+
+
+
+
+
