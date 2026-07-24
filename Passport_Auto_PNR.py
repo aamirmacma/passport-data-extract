@@ -139,43 +139,15 @@ def run():
         return father, cnic
 
 
-    # ---------- ROBUST MRZ DETECTOR (NAYA FUNCTION) ----------
-    def detect_mrz_robust(image_path):
-        original_img = cv2.imread(image_path)
-        if original_img is None: 
-            return None
-        
-        # Agar tasweer bohut badi hai (high res mobile camera), toh resize karein
-        h, w = original_img.shape[:2]
-        if max(h, w) > 2000:
-            scale = 2000 / max(h, w)
-            original_img = cv2.resize(original_img, (0,0), fx=scale, fy=scale)
-
-        # 4 Mukhtalif angles try karein
-        rotations = [
-            None, # Seedha check karein
-            cv2.ROTATE_90_CLOCKWISE,
-            cv2.ROTATE_180,
-            cv2.ROTATE_90_COUNTERCLOCKWISE
-        ]
-        
-        for rot in rotations:
-            if rot is not None:
-                test_img = cv2.rotate(original_img, rot)
-            else:
-                test_img = original_img
-                
-            # Tasweer ko update karke save karein takay OCR/MRZ theek se kaam kare
-            cv2.imwrite(image_path, test_img) 
-            
-            try:
-                mrz = read_mrz(image_path)
-                if mrz and mrz.to_dict():
-                    return mrz # MRZ mil gaya, ab image theek angle mein save hai
-            except:
-                pass
-                
-        return None
+    # ---------- ORIGINAL AUTO ROTATE (RESTORED) ----------
+    def auto_rotate(path):
+        img = cv2.imread(path)
+        if img is None:
+            return
+        h, w = img.shape[:2]
+        if h > w:
+            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+        cv2.imwrite(path, img)
 
 
     # ================= TRAVEL DETAILS =================
@@ -214,8 +186,13 @@ def run():
             with open(temp, "wb") as fp:
                 fp.write(f.getbuffer())
 
-            # Purana auto_rotate hata kar naya robust function laga diya
-            mrz = detect_mrz_robust(temp)
+            # Wapis purana aur reliable tareeqa lagaya gaya hai
+            auto_rotate(temp)
+
+            try:
+                mrz = read_mrz(temp)
+            except:
+                mrz = None
 
             if not mrz:
                 st.error("MRZ not detected. Kripya clear aur saaf tasweer upload karein jis mein glare na ho.")
@@ -244,7 +221,6 @@ def run():
             age, dob = calculate_age(d.get("date_of_birth"))
             exp = safe_date(d.get("expiration_date"))
 
-            # Tasweer theek angle mein save ho chuki hai, Tesseract bhi acha perform karega
             father, cnic = extract_extra_fields(temp)
             title = passenger_title(age, gender)
 
