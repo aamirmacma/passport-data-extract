@@ -1,233 +1,101 @@
+import sys
+import subprocess
 import streamlit as st
-from passporteye import read_mrz
-import datetime
-import pytesseract
-import os
-import cv2
-import uuid
-import re
 
-# ================= TESSERACT =================
-if os.name == "nt":
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-else:
-    pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+# App start hone se pehle OpenCV fix
+subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python", "opencv-python-headless"])
+subprocess.call([sys.executable, "-m", "pip", "install", "opencv-python-headless==4.8.1.78"])
 
-def run():
-    st.header("✈️ Passport Auto PNR Builder")
+# ==============================
+# PAGE CONFIG
+# ==============================
+st.set_page_config(
+    page_title="Passport | Photo | Auto Builder",
+    layout="wide"
+)
 
-    # ---------- DATE FIX ----------
-    def mrz_date_fix(d):
-        try:
-            if not d or len(str(d)) < 6: return None
-            d = str(d)
-            y = int(d[:2])
-            m = int(d[2:4])
-            da = int(d[4:6])
-            if y > datetime.datetime.now().year % 100: y += 1900
-            else: y += 2000
-            return datetime.datetime(y, m, da)
-        except: return None
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .viewerBadge_container__1QSob {visibility: hidden !important;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-    def safe_date(d):
-        dt = mrz_date_fix(d)
-        return "" if dt is None else dt.strftime("%d%b%y").upper()
+# ==============================
+# IMPORT ALL PAGES
+# ==============================
+import Passport_Auto_PNR
+import Passport_Photo_Maker
+import Passport_Size_Maker
+import Hajj_Form_Extractor
+import ehajj_passport_size
+import ehajj_photo_size
 
-    def calculate_age(d):
-        birth = mrz_date_fix(d)
-        if birth is None: return 30, ""
-        today = datetime.datetime.today()
-        age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
-        return age, birth.strftime("%d%b%y").upper()
+# ==============================
+# HEADER DESIGN
+# ==============================
+st.markdown("""
+<style>
+.main-header {
+    background: linear-gradient(90deg,#0d47a1,#1976d2);
+    padding: 18px;
+    border-radius: 10px;
+    color: white;
+    font-size: 26px;
+    font-weight: bold;
+}
+.dev {
+    float:right;
+    background:white;
+    color:#0d47a1;
+    padding:5px 12px;
+    border-radius:20px;
+    font-size:14px;
+}
+</style>
+""", unsafe_allow_html=True)
 
-    # ---------- TITLE ----------
-    def passenger_title(age, gender):
-        if age >= 12: return "MR" if gender == "M" else "MRS"
-        elif age >= 2: return "CHD"
-        else: return "INF"
+st.markdown("""
+<div class="main-header">
+✈️ Passport | Photo | Auto Builder
+<span class="dev">Developed by Aamir Khan</span>
+</div>
+""", unsafe_allow_html=True)
 
-    # ---------- NAME CLEANER ----------
-    def clean_word(w):
-        if len(w) <= 1: return False
-        if len(set(w)) == 1: return False
-        if w.count("K") > len(w) * 0.6: return False
-        return True
+st.write("")
 
-    def split_joined_name(name):
-        patterns = ["ABDUR", "ABDUL", "REHMAN", "RAHMAN", "SYED", "AHMED", "MUHAMMAD", "MOHAMMAD", "ALI", "HUSSAIN", "HASSAN", "KHAN"]
-        for p in patterns:
-            name = name.replace(p, " " + p)
-        return " ".join(name.split())
+# ==============================
+# MAIN TABS
+# ==============================
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "Passport Auto PNR",
+    "Passport Photo Maker",
+    "Passport Size Maker",
+    "Hajj Form Extractor",
+    "eHajj Passport Size",
+    "eHajj Photo Size"
+])
 
-    def parse_mrz_names(surname, names):
-        surname = surname.replace("<", "").strip().upper()
-        names = names.replace("<", " ")
-        names = " ".join(names.split()).upper()
-        words = []
-        for w in names.split():
-            if clean_word(w):
-                words.append(split_joined_name(w))
-        return surname, " ".join(words)
+# ==============================
+# TABS CONTENT
+# ==============================
+with tab1:
+    Passport_Auto_PNR.run()
 
-    # ---------- OCR EXTRA ----------
-    def extract_extra_fields(path):
-        img = cv2.imread(path)
-        if img is None: return "", ""
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        text = pytesseract.image_to_string(gray).upper()
-        father, cnic = "", ""
-        lines = text.split("\n")
-        for i, line in enumerate(lines):
-            if "FATHER" in line or "HUSBAND" in line:
-                if i + 1 < len(lines):
-                    father = lines[i+1].strip()
-            m = re.search(r"\d{5}-\d{7}-\d", line)
-            if m: cnic = m.group()
-        return father, cnic
+with tab2:
+    Passport_Photo_Maker.run()
 
-    # ---------- NEW SMART MRZ READER ----------
-    def read_mrz_smart(path):
-        img = cv2.imread(path)
-        if img is None: return None
-        
-        # 1. Bina ghumaaye check karo (Kyunke aapki tasweer mein MRZ already seedha hai!)
-        try:
-            mrz = read_mrz(path)
-            if mrz and mrz.to_dict(): return mrz
-        except: pass
+with tab3:
+    Passport_Size_Maker.run()
 
-        test_path = path + "_test.jpg"
-        
-        # 2. Agar nahi mila toh 4 angles try karo
-        angles = [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE]
-        for angle in angles:
-            test_img = cv2.rotate(img, angle)
-            cv2.imwrite(test_path, test_img)
-            try:
-                mrz = read_mrz(test_path)
-                if mrz and mrz.to_dict():
-                    cv2.imwrite(path, test_img) # update original so OCR works
-                    if os.path.exists(test_path): os.remove(test_path)
-                    return mrz
-            except: pass
+with tab4:
+    Hajj_Form_Extractor.run()
 
-        # 3. Double Page Scan fix (Sirf bottom half check karo)
-        h, w = img.shape[:2]
-        if h > w:
-            bottom_half = img[int(h/2):h, :]
-            cv2.imwrite(test_path, bottom_half)
-            try:
-                mrz = read_mrz(test_path)
-                if mrz and mrz.to_dict():
-                    if os.path.exists(test_path): os.remove(test_path)
-                    return mrz
-            except: pass
+with tab5:
+    ehajj_passport_size.run()
 
-        if os.path.exists(test_path): os.remove(test_path)
-        return None
-
-    # ================= TRAVEL DETAILS =================
-    st.subheader("Travel Details")
-
-    col1, col2 = st.columns(2)
-    with col1: departure_date = st.date_input("Departure Date")
-    with col2: return_date = st.date_input("Return Date")
-
-    total_days = 0
-    if departure_date and return_date:
-        total_days = (return_date - departure_date).days
-        st.success(f"Total Stay: {total_days} Days")
-
-    # ================= UPLOAD =================
-    files = st.file_uploader("Upload Passport Images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
-
-    passengers = []
-    seen = set()
-
-    if files:
-        for f in files:
-            temp = f"temp_{uuid.uuid4().hex}.jpg"
-            with open(temp, "wb") as fp:
-                fp.write(f.getbuffer())
-
-            # Yahan purana auto_rotate hata kar Naya Smart Reader laga diya!
-            mrz = read_mrz_smart(temp)
-
-            if not mrz:
-                st.warning(f"MRZ not detected! Please upload a clear image for {f.name}.")
-                if os.path.exists(temp): os.remove(temp)
-                continue
-
-            d = mrz.to_dict()
-            passport = d.get("number", "")
-
-            if passport in seen:
-                st.warning(f"Duplicate skipped: {passport}")
-                if os.path.exists(temp): os.remove(temp)
-                continue
-
-            seen.add(passport)
-
-            surname, names = parse_mrz_names(d.get("surname", ""), d.get("names", ""))
-            gender = d.get("sex", "M")
-            country = d.get("country", "PAK")
-            age, dob = calculate_age(d.get("date_of_birth"))
-            exp = safe_date(d.get("expiration_date"))
-            father, cnic = extract_extra_fields(temp)
-            title = passenger_title(age, gender)
-
-            passengers.append({
-                "surname": surname, "names": names, "title": title, "passport": passport,
-                "dob": dob, "exp": exp, "gender": gender, "country": country,
-                "father": father, "cnic": cnic
-            })
-
-            if os.path.exists(temp): os.remove(temp)
-
-    # ================= OUTPUT =================
-    if passengers:
-        st.subheader("Extracted Passport Details")
-
-        adults, children, infants = [], [], []
-        nm1_lines, docs_lines = [], []
-        pax = 1
-
-        for i, p in enumerate(passengers, 1):
-            st.markdown(f"**Passenger {i}**\n\nSurname: {p['surname']}  \nGiven Name: {p['names']}  \nPassport: {p['passport']}  \nDOB: {p['dob']}  \nExpiry: {p['exp']}  \nGender: {p['gender']}  \nFather/Husband: {p['father']}  \nCNIC: {p['cnic']}")
-
-            if p["title"] == "INF": infants.append(p)
-            elif p["title"] in ["MSTR", "MISS", "CHD"]: children.append(p)
-            else: adults.append(p)
-
-            docs_lines.append(f"SRDOCS SV HK1-P-{p['country']}-{p['passport']}-{p['country']}-{p['dob']}-{p['gender']}-{p['exp']}-{p['surname']}-{p['names'].replace(' ','-')}-H/P{pax}")
-            pax += 1
-
-        inf_index = 0
-        for adult in adults:
-            nm1 = f"NM1{adult['surname']}/{adult['names']} {adult['title']}"
-            if inf_index < len(infants):
-                inf = infants[inf_index]
-                nm1 += f" (INF/{inf['surname']} {inf['names']}/{inf['dob']})"
-                inf_index += 1
-            nm1_lines.append(nm1)
-
-        for chd in children:
-            nm1_lines.append(f"NM1{chd['surname']}/{chd['names']} {chd['title']} (CHD/{chd['dob']})")
-
-        st.subheader("NM1 Entries")
-        st.code("\n".join(nm1_lines))
-
-        st.subheader("SRDOCS Entries")
-        st.code("\n".join(docs_lines))
-
-        st.subheader("PNR Commands")
-        dep = departure_date.strftime("%d%b").upper() if departure_date else "18FEB"
-        ret = return_date.strftime("%d%b").upper() if return_date else "18FEB"
-
-        pnr_commands = [
-            "NM1KHAN/ABDUL BASIT MR", "NM1KHAN/KHAN ALINA MRS", "NM1KHAN/KISWA MS",
-            "NM1KHAN/ABDUL BASIT MR (INF/KHAN AYZAL/22MAY24)", "NM1KHAN/MUHAMMAD AHMAD MSTR (CHD/22MAY22)",
-            "NM1KHAN/MUHAMMAD FATIMA MISS (CHD/22MAY16)", f"AN{dep}KHIJED/ASV", "SS1T3",
-            f"AN{ret}JEDKHI/ASV", "SS1T3", "AP", "TKOK", "ER", "IR"
-        ]
-        st.code("\n".join(pnr_commands))
+with tab6:
+    ehajj_photo_size.run()
