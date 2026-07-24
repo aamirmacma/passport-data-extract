@@ -185,6 +185,7 @@ def run():
             with open(temp, "wb") as fp:
                 fp.write(f.getbuffer())
 
+            # Aap ka purana rotation function
             auto_rotate(temp)
 
             try:
@@ -192,9 +193,25 @@ def run():
             except:
                 mrz = None
 
+            # ---> MAGIC FIX: Agar seedhi tasweer par detect nahi hua, toh code usay mazeed ghuma kar khud check kar lega
+            if not mrz:
+                img = cv2.imread(temp)
+                if img is not None:
+                    for _ in range(3):
+                        img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+                        cv2.imwrite(temp, img)
+                        try:
+                            mrz = read_mrz(temp)
+                            if mrz: 
+                                break  # Agar mil gaya toh ghumaana band kar do
+                        except:
+                            pass
+            # <--- MAGIC FIX END
+
             if not mrz:
                 st.warning("MRZ not detected")
-                os.remove(temp)
+                if os.path.exists(temp):
+                    os.remove(temp)
                 continue
 
             d = mrz.to_dict()
@@ -202,7 +219,8 @@ def run():
 
             if passport in seen:
                 st.warning(f"Duplicate skipped: {passport}")
-                os.remove(temp)
+                if os.path.exists(temp):
+                    os.remove(temp)
                 continue
 
             seen.add(passport)
@@ -234,7 +252,8 @@ def run():
                 "cnic": cnic
             })
 
-            os.remove(temp)
+            if os.path.exists(temp):
+                os.remove(temp)
 
 
     # ================= OUTPUT =================
