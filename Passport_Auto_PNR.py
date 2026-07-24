@@ -19,7 +19,10 @@ else:
 # ==================================================
 def run():
 
-    st.header("✈️ Passport Auto PNR Builder")
+    # Professional Header & Title
+    st.markdown("<h1 style='text-align: center; color: #1F4E78;'>🕋 AL FATTAH MUNAZZAM (PVT) LTD.</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: gray;'>Passport Auto PNR Builder</h3>", unsafe_allow_html=True)
+    st.markdown("---")
 
     # ---------- DATE FIX ----------
     def mrz_date_fix(d):
@@ -147,7 +150,7 @@ def run():
 
 
     # ================= TRAVEL DETAILS =================
-    st.subheader("Travel Details")
+    st.subheader("🛫 Travel Details")
 
     col1, col2 = st.columns(2)
 
@@ -235,10 +238,10 @@ def run():
 
 
     # ================= OUTPUT =================
-                
+            
     if passengers:
 
-        st.subheader("Extracted Passport Details")
+        st.subheader("📑 Extracted Passport Details")
 
         adults = []
         children = []
@@ -268,7 +271,7 @@ def run():
             if p["title"] == "INF":
                 infants.append(p)
 
-            elif p["title"] in ["MSTR", "MISS"]:
+            elif p["title"] in ["MSTR", "MISS", "CHD"]:
                 children.append(p)
 
             else:
@@ -311,18 +314,18 @@ def run():
 
 
         # ================= SHOW NM1 =================
-        st.subheader("NM1 Entries")
+        st.subheader("📋 NM1 Entries")
         st.code("\n".join(nm1_lines))
 
 
         # ================= SRDOCS =================
-        st.subheader("SRDOCS Entries")
+        st.subheader("📋 SRDOCS Entries")
         st.code("\n".join(docs_lines))
 
 
         # ================= PNR COMMANDS =================
 
-        st.subheader("PNR Commands")
+        st.subheader("💻 PNR Commands")
 
         # safe date handling
         if departure_date:
